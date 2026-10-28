@@ -1,0 +1,6 @@
+{
+  "name": "Pulso Acadêmico - Inteligência & Governança Educacional",
+  "description": "Plataforma analítica para coordenação de cursos de TI: consolidação de indicadores educacionais, cálculo de LHI/ARS, auditoria tabular e emissão de relatórios executivos em Excel e PowerPoint.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
