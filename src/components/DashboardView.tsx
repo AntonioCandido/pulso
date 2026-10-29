@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { DisciplineMetric, SystemConfig, AcademicCourse, ImportSession } from '../types';
 import { ExecutiveDashboardCanvas } from './ExecutiveDashboardCanvas';
-import { PulsoConceptualMatrixTable } from './PulsoConceptualMatrixTable';
 
 interface DashboardViewProps {
   disciplines: DisciplineMetric[];
@@ -330,11 +329,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
-      </div>
-
-      {/* Official Pulso 1.0 vs. Pulso 2.0 Conceptual Matrix Table (Hidden during print) */}
-      <div className="no-print">
-        <PulsoConceptualMatrixTable showSimulator={false} />
       </div>
     </div>
   );

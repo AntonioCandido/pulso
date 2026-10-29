@@ -97,18 +97,23 @@ export interface PulsoExecutiveSummary {
   entryYear: string;
 }
 
+export type FormulaPresetId = 'estacio' | 'mec' | 'retention' | 'rigor' | 'custom';
+
 export interface FormulaWeights {
+  presetId?: FormulaPresetId;
+  presetName?: string;
+  pulsoRuleVersion?: '2.0' | '1.0';
   lhi: {
-    learningScore: number;  // Default 0.35
-    attendance: number;     // Default 0.25
-    passRate: number;       // Default 0.20 (100 - failureRate)
-    lmsAdherence: number;   // Default 0.20
+    learningScore: number;  // Default 0.35 (Grau de Aprendizagem Pulso 2.0)
+    attendance: number;     // Default 0.25 (Frequência Pulso 2.0)
+    passRate: number;       // Default 0.20 (100 - Reprovação Pulso 2.0)
+    lmsAdherence: number;   // Default 0.20 (Adesão AV/SM & Tempo de Estudo Pulso 2.0)
   };
   ars: {
-    failureRate: number;    // Default 0.40
-    infrequency: number;    // Default 0.30 (100 - attendance)
-    learningDeficit: number;// Default 0.20 (100 - learningScore)
-    dropoutRisk: number;    // Default 0.10
+    failureRate: number;    // Default 0.40 (Reprovação Pulso 2.0)
+    infrequency: number;    // Default 0.30 (100 - Frequência Pulso 2.0)
+    learningDeficit: number;// Default 0.20 (100 - Grau de Aprendizagem Pulso 2.0)
+    dropoutRisk: number;    // Default 0.10 (Baixa Adesão AV/SM & Risco de Evasão)
   };
 }
 

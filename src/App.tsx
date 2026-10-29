@@ -47,6 +47,14 @@ export default function App() {
         if (!parsed.biConnections.some(c => c.reportUrl.includes('f97e7c8e'))) {
           parsed.biConnections = INITIAL_SYSTEM_CONFIG.biConnections;
         }
+        if (parsed.weights && !parsed.weights.presetId) {
+          parsed.weights = {
+            ...parsed.weights,
+            presetId: 'estacio',
+            presetName: 'Padrão Estácio',
+            pulsoRuleVersion: '2.0',
+          };
+        }
         return parsed;
       }
     } catch (e) {

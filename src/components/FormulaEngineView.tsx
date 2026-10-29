@@ -1,18 +1,15 @@
 import React, { useState } from 'react';
 import { 
-  Sliders, 
   RotateCcw, 
   CheckCircle2, 
-  AlertTriangle, 
   Sparkles, 
-  Layers, 
   Save, 
   BookOpen, 
-  TrendingUp,
-  ShieldAlert
+  ShieldCheck,
+  GitCompare
 } from 'lucide-react';
-import { FormulaWeights, DisciplineMetric, SystemConfig } from '../types';
-import { DEFAULT_WEIGHTS, recalculateAllMetrics } from '../utils/calculations';
+import { FormulaWeights, DisciplineMetric } from '../types';
+import { DEFAULT_WEIGHTS, FORMULA_PRESETS, recalculateAllMetrics } from '../utils/calculations';
 import { PulsoConceptualMatrixTable } from './PulsoConceptualMatrixTable';
 
 interface FormulaEngineViewProps {
@@ -28,8 +25,16 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
   disciplines,
   onBatchUpdateDisciplines,
 }) => {
-  const [localWeights, setLocalWeights] = useState<FormulaWeights>(weights);
+  const [localWeights, setLocalWeights] = useState<FormulaWeights>(() => ({
+    ...DEFAULT_WEIGHTS,
+    ...weights,
+    presetId: weights.presetId || 'estacio',
+    presetName: weights.presetName || 'Padrão Estácio',
+    pulsoRuleVersion: weights.pulsoRuleVersion || '2.0',
+  }));
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  const activePresetId = localWeights.presetId || 'estacio';
 
   // Calculate sum of weights to ensure mathematical consistency (100%)
   const lhiSum = Number(
@@ -50,44 +55,16 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
     ).toFixed(2)
   );
 
-  const handleApplyPreset = (presetName: 'standard' | 'retention' | 'rigor') => {
-    let preset: FormulaWeights;
-    if (presetName === 'standard') {
-      preset = DEFAULT_WEIGHTS;
-    } else if (presetName === 'retention') {
-      // Prioritizes attendance and dropout prevention
-      preset = {
-        lhi: {
-          learningScore: 0.25,
-          attendance: 0.35,
-          passRate: 0.20,
-          lmsAdherence: 0.20,
-        },
-        ars: {
-          failureRate: 0.30,
-          infrequency: 0.40,
-          learningDeficit: 0.15,
-          dropoutRisk: 0.15,
-        },
-      };
-    } else {
-      // Rigor: prioritizes hard grades and pass rates
-      preset = {
-        lhi: {
-          learningScore: 0.45,
-          attendance: 0.15,
-          passRate: 0.30,
-          lmsAdherence: 0.10,
-        },
-        ars: {
-          failureRate: 0.50,
-          infrequency: 0.15,
-          learningDeficit: 0.25,
-          dropoutRisk: 0.10,
-        },
-      };
-    }
+  const handleApplyPreset = (presetKey: 'estacio' | 'mec' | 'retention' | 'rigor') => {
+    const preset = FORMULA_PRESETS[presetKey];
     setLocalWeights(preset);
+    onUpdateWeights(preset);
+    if (disciplines.length > 0) {
+      const updated = recalculateAllMetrics(disciplines, preset);
+      onBatchUpdateDisciplines(updated);
+    }
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 3000);
   };
 
   const handleSaveAndRecalculate = () => {
@@ -101,12 +78,16 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
             <span>RF03</span>
             <span aria-hidden="true">·</span>
             <span>Algoritmo Ponderado & Governança Institucional</span>
+            <span aria-hidden="true">·</span>
+            <span className="font-semibold text-[#0A3977]">
+              Perfil Ativo: {localWeights.presetName || 'Padrão Estácio'} (Pulso {localWeights.pulsoRuleVersion || '2.0'})
+            </span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             Motor de Fórmulas e Calibragem de Índices
@@ -114,27 +95,140 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
         </div>
 
         {/* Preset Selector */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500">Perfis Pré-calibrados:</span>
-          <div className="flex items-center gap-1 p-1 bg-slate-200/80 rounded-lg">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-slate-500 font-medium">Perfis Pré-calibrados:</span>
+          <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-200/80 rounded-lg">
             <button
-              onClick={() => handleApplyPreset('standard')}
-              className="px-2.5 py-1 text-xs font-medium rounded hover:bg-white text-slate-700"
+              type="button"
+              onClick={() => handleApplyPreset('estacio')}
+              className={`px-3 py-1.5 text-xs rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
+                activePresetId === 'estacio'
+                  ? 'bg-[#0A3977] text-white font-bold shadow-xs'
+                  : 'font-semibold text-slate-700 hover:bg-white'
+              }`}
+              title="Perfil Default Oficial: utiliza as regras da Matriz Conceitual de Indicadores — Pulso 2.0"
+            >
+              <Sparkles className={`w-3.5 h-3.5 ${activePresetId === 'estacio' ? 'text-[#FFB800]' : 'text-[#0A3977]'}`} />
+              <span>Padrão Estácio</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded font-extrabold uppercase ${
+                  activePresetId === 'estacio'
+                    ? 'bg-[#FFB800] text-[#0A3977]'
+                    : 'bg-slate-300/80 text-slate-700'
+                }`}
+              >
+                Default
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleApplyPreset('mec')}
+              className={`px-2.5 py-1.5 text-xs rounded-md transition-all cursor-pointer ${
+                activePresetId === 'mec'
+                  ? 'bg-white text-slate-900 font-bold shadow-xs'
+                  : 'font-medium text-slate-700 hover:bg-white'
+              }`}
             >
               Padrão MEC
             </button>
+
             <button
+              type="button"
               onClick={() => handleApplyPreset('retention')}
-              className="px-2.5 py-1 text-xs font-medium rounded hover:bg-white text-slate-700"
+              className={`px-2.5 py-1.5 text-xs rounded-md transition-all cursor-pointer ${
+                activePresetId === 'retention'
+                  ? 'bg-white text-slate-900 font-bold shadow-xs'
+                  : 'font-medium text-slate-700 hover:bg-white'
+              }`}
             >
               Foco Retenção
             </button>
+
             <button
+              type="button"
               onClick={() => handleApplyPreset('rigor')}
-              className="px-2.5 py-1 text-xs font-medium rounded hover:bg-white text-slate-700"
+              className={`px-2.5 py-1.5 text-xs rounded-md transition-all cursor-pointer ${
+                activePresetId === 'rigor'
+                  ? 'bg-white text-slate-900 font-bold shadow-xs'
+                  : 'font-medium text-slate-700 hover:bg-white'
+              }`}
             >
               Rigor Avaliativo
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Active Profile Governance Banner: Padrão Estácio — Matriz Conceitual de Indicadores — Pulso 2.0 */}
+      <div className="bg-white border-2 border-[#0A3977]/20 rounded-xl overflow-hidden shadow-xs">
+        <div className="bg-[#0A3977] text-white px-5 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b-2 border-[#FFB800]">
+          <div className="flex items-center gap-2.5">
+            <GitCompare className="w-5 h-5 text-[#FFB800] shrink-0" />
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-sm font-bold text-white uppercase tracking-wide">
+                  Perfil Pré-calibrado: Padrão Estácio — Matriz Conceitual de Indicadores — Pulso 2.0
+                </h2>
+                {activePresetId === 'estacio' && (
+                  <span className="text-[10px] font-extrabold bg-[#FFB800] text-[#0A3977] px-2 py-0.5 rounded uppercase">
+                    Ativo por Padrão (Default)
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-blue-100 mt-0.5">
+                Regras oficiais de apuração acadêmica, fórmulas de avaliação e mudanças estruturais de modelagem de dados
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-white/15 text-white px-2.5 py-1 rounded">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#FFB800]" />
+              <span>Conformidade Pulso 2.0</span>
+            </span>
+          </div>
+        </div>
+
+        <div className="p-4 bg-[#F4F7FA] grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
+          <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+            <div className="font-bold text-[#0A3977] text-[11px]">1. Grau de Aprendizagem</div>
+            <p className="text-[11px] text-slate-600 mt-1 leading-snug">
+              Provas com nota &ge; nota esperada / Total de provas realizadas (questões 2023.1 a 2024.1+).
+            </p>
+          </div>
+          <div className="bg-white p-2.5 rounded-lg border border-amber-300 ring-1 ring-amber-200/60">
+            <div className="font-bold text-[#0A3977] text-[11px] flex items-center justify-between">
+              <span>2. Reprovação (Pulso 2.0)</span>
+              <span className="text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded font-bold">Novo 2.0</span>
+            </div>
+            <p className="text-[11px] text-slate-600 mt-1 leading-snug">
+              Notas &lt;6 em <code className="font-mono font-semibold">maior(AV,NC,AVS)+(SM1+SM2)</code> / alunos que realizaram ao menos 1 das 3 avaliações.
+            </p>
+          </div>
+          <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+            <div className="font-bold text-[#0A3977] text-[11px]">3. Tempo de Estudo</div>
+            <p className="text-[11px] text-slate-600 mt-1 leading-snug">
+              Tempo de navegação no conteúdo da disciplina + <strong>52&apos;</strong> para cada download realizado.
+            </p>
+          </div>
+          <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+            <div className="font-bold text-[#0A3977] text-[11px]">4. Adesão AV</div>
+            <p className="text-[11px] text-slate-600 mt-1 leading-snug">
+              Alunos disciplinas que realizaram ao menos uma avaliação <code className="font-mono font-semibold">(AV, NC, AVS, NF)</code> / Total alunos disciplinas.
+            </p>
+          </div>
+          <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+            <div className="font-bold text-[#0A3977] text-[11px]">5. Adesão SM (2024.1+)</div>
+            <p className="text-[11px] text-slate-600 mt-1 leading-snug">
+              Todas as modalidades seguem com <code className="font-mono font-semibold">(SM1 e SM2)</code> / Quantidade de alunos disciplinas.
+            </p>
+          </div>
+          <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+            <div className="font-bold text-[#0A3977] text-[11px]">6. Frequência & Modelagem</div>
+            <p className="text-[11px] text-slate-600 mt-1 leading-snug">
+              <code className="font-mono font-semibold">Presenças / (Presença + Faltas)</code> com fonte e modelagem estrutural Pulso 2.0.
+            </p>
           </div>
         </div>
       </div>
@@ -150,10 +244,10 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
               </div>
               <div>
                 <h2 className="text-sm font-bold text-slate-900">
-                  Learning Health Index (Índice de Saúde)
+                  Learning Health Index (Índice de Saúde — Pulso 2.0)
                 </h2>
                 <div className="text-[11px] text-slate-500">
-                  Avalia a saúde pedagógica global da turma (0 a 100)
+                  Avalia a saúde pedagógica global da turma conforme Matriz Conceitual Pulso 2.0 (0 a 100)
                 </div>
               </div>
             </div>
@@ -170,14 +264,14 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
           </div>
 
           <div className="p-3 bg-slate-50 rounded border border-slate-200 font-mono text-[11px] text-slate-700">
-            LHI = (<strong>{(localWeights.lhi.learningScore * 100).toFixed(0)}%</strong> × Aprendizagem) + (<strong>{(localWeights.lhi.attendance * 100).toFixed(0)}%</strong> × Frequência) + (<strong>{(localWeights.lhi.passRate * 100).toFixed(0)}%</strong> × Retenção) + (<strong>{(localWeights.lhi.lmsAdherence * 100).toFixed(0)}%</strong> × LMS)
+            LHI = (<strong>{(localWeights.lhi.learningScore * 100).toFixed(0)}%</strong> × Aprendizagem) + (<strong>{(localWeights.lhi.attendance * 100).toFixed(0)}%</strong> × Frequência) + (<strong>{(localWeights.lhi.passRate * 100).toFixed(0)}%</strong> × Aprovação Pulso 2.0) + (<strong>{(localWeights.lhi.lmsAdherence * 100).toFixed(0)}%</strong> × Adesão AV/SM)
           </div>
 
           {/* Sliders */}
           <div className="space-y-3 text-xs pt-1">
             <div>
               <div className="flex justify-between font-medium text-slate-700 mb-1">
-                <span>Grau de Aprendizagem (Avaliações / GPA)</span>
+                <span>Grau de Aprendizagem (Provas &ge; Nota Esperada / Realizadas)</span>
                 <span className="font-mono tabular-nums font-bold">
                   {(localWeights.lhi.learningScore * 100).toFixed(0)}%
                 </span>
@@ -191,6 +285,8 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
                 onChange={(e) =>
                   setLocalWeights({
                     ...localWeights,
+                    presetId: 'custom',
+                    presetName: 'Personalizado',
                     lhi: { ...localWeights.lhi, learningScore: parseFloat(e.target.value) },
                   })
                 }
@@ -200,7 +296,7 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
 
             <div>
               <div className="flex justify-between font-medium text-slate-700 mb-1">
-                <span>Frequência em Sala de Aula</span>
+                <span>Frequência (Presenças / Presença + Faltas)</span>
                 <span className="font-mono tabular-nums font-bold">
                   {(localWeights.lhi.attendance * 100).toFixed(0)}%
                 </span>
@@ -214,6 +310,8 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
                 onChange={(e) =>
                   setLocalWeights({
                     ...localWeights,
+                    presetId: 'custom',
+                    presetName: 'Personalizado',
                     lhi: { ...localWeights.lhi, attendance: parseFloat(e.target.value) },
                   })
                 }
@@ -223,7 +321,7 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
 
             <div>
               <div className="flex justify-between font-medium text-slate-700 mb-1">
-                <span>Taxa de Aprovação Efetiva (100 - Reprovação)</span>
+                <span>Taxa de Aprovação Pulso 2.0 (100 - Reprovação sobre Avaliados AV/NC/AVS)</span>
                 <span className="font-mono tabular-nums font-bold">
                   {(localWeights.lhi.passRate * 100).toFixed(0)}%
                 </span>
@@ -237,6 +335,8 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
                 onChange={(e) =>
                   setLocalWeights({
                     ...localWeights,
+                    presetId: 'custom',
+                    presetName: 'Personalizado',
                     lhi: { ...localWeights.lhi, passRate: parseFloat(e.target.value) },
                   })
                 }
@@ -246,7 +346,7 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
 
             <div>
               <div className="flex justify-between font-medium text-slate-700 mb-1">
-                <span>Adesão & Interações no LMS (Moodle / Blackboard)</span>
+                <span>Adesão AV (AV, NC, AVS, NF), Adesão SM (SM1+SM2) & Estudo (+52&apos;/download)</span>
                 <span className="font-mono tabular-nums font-bold">
                   {(localWeights.lhi.lmsAdherence * 100).toFixed(0)}%
                 </span>
@@ -260,6 +360,8 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
                 onChange={(e) =>
                   setLocalWeights({
                     ...localWeights,
+                    presetId: 'custom',
+                    presetName: 'Personalizado',
                     lhi: { ...localWeights.lhi, lmsAdherence: parseFloat(e.target.value) },
                   })
                 }
@@ -278,10 +380,10 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
               </div>
               <div>
                 <h2 className="text-sm font-bold text-slate-900">
-                  Academic Risk Score (Índice de Risco)
+                  Academic Risk Score (Índice de Risco — Pulso 2.0)
                 </h2>
                 <div className="text-[11px] text-slate-500">
-                  Calcula probabilidade de retenção, reprovação ou evasão (0 a 100)
+                  Calcula risco de reprovação e retenção pela expressão oficial Pulso 2.0 (0 a 100)
                 </div>
               </div>
             </div>
@@ -298,14 +400,14 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
           </div>
 
           <div className="p-3 bg-slate-50 rounded border border-slate-200 font-mono text-[11px] text-slate-700">
-            ARS = (<strong>{(localWeights.ars.failureRate * 100).toFixed(0)}%</strong> × Reprovação) + (<strong>{(localWeights.ars.infrequency * 100).toFixed(0)}%</strong> × Faltas) + (<strong>{(localWeights.ars.learningDeficit * 100).toFixed(0)}%</strong> × Déficit) + (<strong>{(localWeights.ars.dropoutRisk * 100).toFixed(0)}%</strong> × Evasão)
+            ARS = (<strong>{(localWeights.ars.failureRate * 100).toFixed(0)}%</strong> × Reprovação Pulso 2.0) + (<strong>{(localWeights.ars.infrequency * 100).toFixed(0)}%</strong> × Faltas) + (<strong>{(localWeights.ars.learningDeficit * 100).toFixed(0)}%</strong> × Déficit) + (<strong>{(localWeights.ars.dropoutRisk * 100).toFixed(0)}%</strong> × Evasão)
           </div>
 
           {/* Sliders */}
           <div className="space-y-3 text-xs pt-1">
             <div>
               <div className="flex justify-between font-medium text-slate-700 mb-1">
-                <span>Taxa de Reprovação Observada</span>
+                <span>Reprovação Pulso 2.0: maior(AV,NC,AVS)+(SM1+SM2) &lt; 6 / Avaliados</span>
                 <span className="font-mono tabular-nums font-bold">
                   {(localWeights.ars.failureRate * 100).toFixed(0)}%
                 </span>
@@ -319,6 +421,8 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
                 onChange={(e) =>
                   setLocalWeights({
                     ...localWeights,
+                    presetId: 'custom',
+                    presetName: 'Personalizado',
                     ars: { ...localWeights.ars, failureRate: parseFloat(e.target.value) },
                   })
                 }
@@ -328,7 +432,7 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
 
             <div>
               <div className="flex justify-between font-medium text-slate-700 mb-1">
-                <span>Infrequência & Faltas Críticas (100 - Presença)</span>
+                <span>Infrequência & Faltas Críticas (100 - Presenças / Presença + Faltas)</span>
                 <span className="font-mono tabular-nums font-bold">
                   {(localWeights.ars.infrequency * 100).toFixed(0)}%
                 </span>
@@ -342,6 +446,8 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
                 onChange={(e) =>
                   setLocalWeights({
                     ...localWeights,
+                    presetId: 'custom',
+                    presetName: 'Personalizado',
                     ars: { ...localWeights.ars, infrequency: parseFloat(e.target.value) },
                   })
                 }
@@ -351,7 +457,7 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
 
             <div>
               <div className="flex justify-between font-medium text-slate-700 mb-1">
-                <span>Déficit de Aprendizagem (100 - Média Avaliativa)</span>
+                <span>Déficit de Aprendizagem (100 - Grau de Aprendizagem Pulso 2.0)</span>
                 <span className="font-mono tabular-nums font-bold">
                   {(localWeights.ars.learningDeficit * 100).toFixed(0)}%
                 </span>
@@ -365,6 +471,8 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
                 onChange={(e) =>
                   setLocalWeights({
                     ...localWeights,
+                    presetId: 'custom',
+                    presetName: 'Personalizado',
                     ars: { ...localWeights.ars, learningDeficit: parseFloat(e.target.value) },
                   })
                 }
@@ -374,7 +482,7 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
 
             <div>
               <div className="flex justify-between font-medium text-slate-700 mb-1">
-                <span>Taxa Histórica de Evasão / Desistência</span>
+                <span>Taxa de Evasão / Ausência em Avaliações (AV, NC, AVS, NF)</span>
                 <span className="font-mono tabular-nums font-bold">
                   {(localWeights.ars.dropoutRisk * 100).toFixed(0)}%
                 </span>
@@ -388,6 +496,8 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
                 onChange={(e) =>
                   setLocalWeights({
                     ...localWeights,
+                    presetId: 'custom',
+                    presetName: 'Personalizado',
                     ars: { ...localWeights.ars, dropoutRisk: parseFloat(e.target.value) },
                   })
                 }
@@ -403,22 +513,24 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
         <div className="flex items-center gap-2 text-xs text-slate-600">
           <BookOpen className="w-4 h-4 text-blue-600" />
           <span>
-            Ao salvar, todas as <strong>{disciplines.length} turmas</strong> cadastradas no Pulso Acadêmico serão reindexadas imediatamente.
+            Ao salvar, todas as <strong>{disciplines.length} turmas</strong> cadastradas no Pulso Acadêmico serão reindexadas imediatamente com as regras do perfil selecionado.
           </span>
         </div>
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setLocalWeights(DEFAULT_WEIGHTS)}
-            className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1"
+            type="button"
+            onClick={() => handleApplyPreset('estacio')}
+            className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>Restaurar Padrão</span>
+            <span>Restaurar Padrão Estácio (Pulso 2.0)</span>
           </button>
 
           <button
+            type="button"
             onClick={handleSaveAndRecalculate}
-            className="flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-md transition-colors shadow-xs"
+            className="flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-md transition-colors shadow-xs cursor-pointer"
           >
             <Save className="w-3.5 h-3.5" />
             <span>Salvar Pesos & Recalcular Toda a Base</span>
@@ -429,7 +541,9 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
       {savedSuccess && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md text-xs font-semibold flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          <span>Fórmulas atualizadas com sucesso! Toda a base acadêmica foi recalculada.</span>
+          <span>
+            Perfil <strong>{localWeights.presetName || 'Padrão Estácio'}</strong> (Matriz Conceitual Pulso {localWeights.pulsoRuleVersion || '2.0'}) aplicado e base acadêmica recalculada com sucesso!
+          </span>
         </div>
       )}
 

@@ -272,8 +272,8 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
                   ? 'text-rose-600' 
                   : 'text-emerald-600'
               }`}>
-                <span className="text-xs">{!hasData ? '—' : studyTimeIsPositive === false ? '▼' : '▲'}</span>
-                <span>{studyTimeDiff}</span>
+                <span className="text-[22px]">{!hasData ? '—' : studyTimeIsPositive === false ? '▼' : '▲'}</span>
+                <span className="text-[22px]">{studyTimeDiff}</span>
               </div>
               <div className={`text-xs font-bold ${
                 !hasData 
@@ -325,8 +325,8 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
                   ? 'text-rose-600' 
                   : 'text-emerald-600'
               }`}>
-                <span className="text-xs">{!hasData ? '—' : attendanceIsPositive === false ? '▼' : '▲'}</span>
-                <span>{attendanceDiff}</span>
+                <span className="text-[22px]">{!hasData ? '—' : attendanceIsPositive === false ? '▼' : '▲'}</span>
+                <span className="text-[22px]">{attendanceDiff}</span>
               </div>
               <div className={`text-xs font-bold ${
                 !hasData 
@@ -357,7 +357,7 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
             title="Grau de Aprendizagem (Pulso 1.0 / 2.0): Total de provas com notas >= as notas esperada / Total de provas realizadas. Nota esperada: média da taxa de acerto das questões que compõem cada prova."
           >
             <div className="text-slate-500 font-medium text-[11px]">Grau de Aprendizagem</div>
-            <div className="text-lg font-bold text-slate-800 mt-0.5">{learningScoreDisplay}</div>
+            <div className="text-[20px] font-bold text-slate-800 mt-0.5">{learningScoreDisplay}</div>
             <div className="text-[10px] text-slate-400 mt-0.5 truncate">
               {hasData ? `Meta: ${learningTarget} · A.A: ${learningPrevious}` : 'Meta: 0,00%'}
             </div>
@@ -368,7 +368,7 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
             title="Reprovação (Pulso 2.0): Quantidade de alunos disciplinas com notas <6 na expressão: maior nota entre (AV, NC e AVS) + (SM1+ SM2) dividido pela quantidade alunos disciplinas que realizaram ao menos uma das três avaliações."
           >
             <div className="text-slate-500 font-medium text-[11px]">Reprovação Geral</div>
-            <div className={`text-lg font-bold mt-0.5 ${!hasData ? 'text-slate-400' : 'text-slate-800'}`}>
+            <div className={`text-[20px] font-bold mt-0.5 ${!hasData ? 'text-slate-400' : 'text-slate-800'}`}>
               {failureRateDisplay}
             </div>
             <div className="text-[10px] text-slate-400 mt-0.5 truncate">
@@ -381,7 +381,7 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
             title="Adesão AV (Pulso 1.0 / 2.0): Quantidade alunos disciplinas que realizaram ao menos uma das avaliações: (AV, NC, AVS, NF) / Quantidade de alunos disciplinas"
           >
             <div className="text-slate-500 font-medium text-[11px]">Adesão AV</div>
-            <div className="text-lg font-bold text-slate-800 mt-0.5">{adhesionAVDisplay}</div>
+            <div className="text-[20px] font-bold text-slate-800 mt-0.5">{adhesionAVDisplay}</div>
             <div className="text-[10px] text-slate-400 mt-0.5 truncate">
               {hasData ? `Meta: ${adhesionAVTarget} · A.A: ${adhesionAVPrevious}` : 'Meta: 0,00%'}
             </div>
@@ -392,7 +392,7 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
             title="Adesão SM (Pulso 1.0 / 2.0): A partir de 2024.1 todas as modalidades seguem com SM1 e SM2 (Quantidade alunos disciplinas que realizaram SM1 e SM2 / Quantidade de alunos disciplinas)."
           >
             <div className="text-slate-500 font-medium text-[11px]">Adesão SM</div>
-            <div className="text-lg font-bold text-slate-800 mt-0.5">{adhesionSMDisplay}</div>
+            <div className="text-[20px] font-bold text-slate-800 mt-0.5">{adhesionSMDisplay}</div>
             <div className="text-[10px] text-slate-400 mt-0.5 truncate">
               {hasData ? `Meta: ${adhesionSMTarget} · A.A: ${adhesionSMPrevious}` : 'Meta: 0,00%'}
             </div>
@@ -400,7 +400,7 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
 
           <div className="bg-white p-3 rounded-lg border border-slate-200 text-xs">
             <div className="text-slate-500 font-medium text-[11px]">Learning Health (LHI)</div>
-            <div className={`text-lg font-bold mt-0.5 ${!hasData ? 'text-slate-400' : 'text-emerald-700'}`}>
+            <div className={`text-[20px] font-bold mt-0.5 ${!hasData ? 'text-slate-400' : 'text-emerald-700'}`}>
               {avgLHI} <span className="text-xs font-normal text-slate-400">/ 100</span>
             </div>
             <div className="text-[10px] text-emerald-600 font-medium mt-0.5">Saúde Pedagógica</div>
@@ -408,7 +408,7 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
 
           <div className="bg-white p-3 rounded-lg border border-slate-200 text-xs">
             <div className="text-slate-500 font-medium text-[11px]">Academic Risk (ARS)</div>
-            <div className={`text-lg font-bold mt-0.5 ${!hasData ? 'text-slate-400' : 'text-amber-600'}`}>
+            <div className={`text-[20px] font-bold mt-0.5 ${!hasData ? 'text-slate-400' : 'text-amber-600'}`}>
               {avgARS} <span className="text-xs font-normal text-slate-400">/ 100</span>
             </div>
             <div className="text-[10px] text-slate-400 font-medium mt-0.5">Risco Acadêmico</div>

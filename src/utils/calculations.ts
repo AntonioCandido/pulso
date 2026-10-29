@@ -8,20 +8,85 @@ import {
   SystemConfig 
 } from '../types';
 
-export const DEFAULT_WEIGHTS: FormulaWeights = {
+/**
+ * Perfil Pré-calibrado Default: "Padrão Estácio"
+ * Baseado nas regras da Matriz Conceitual de Indicadores — Pulso 2.0:
+ * Regras oficiais de apuração acadêmica, fórmulas de avaliação e mudanças estruturais de modelagem de dados.
+ */
+export const ESTACIO_PULSO2_WEIGHTS: FormulaWeights = {
+  presetId: 'estacio',
+  presetName: 'Padrão Estácio',
+  pulsoRuleVersion: '2.0',
   lhi: {
-    learningScore: 0.35,
-    attendance: 0.25,
-    passRate: 0.20,
-    lmsAdherence: 0.20,
+    learningScore: 0.35, // Grau de Aprendizagem (Provas >= nota esperada / Total de provas realizadas)
+    attendance: 0.25,    // Frequência (Presenças / Presença + Faltas)
+    passRate: 0.20,      // Aprovação Pulso 2.0 (100 - Reprovação sobre alunos que realizaram AV, NC ou AVS)
+    lmsAdherence: 0.20,  // Adesão AV, Adesão SM (SM1 e SM2) e Tempo de Estudo (+52' por download)
   },
   ars: {
-    failureRate: 0.40,
-    infrequency: 0.30,
-    learningDeficit: 0.20,
-    dropoutRisk: 0.10,
+    failureRate: 0.40,     // Reprovação Pulso 2.0: maior(AV, NC, AVS) + (SM1 + SM2) < 6 / alunos com >=1 avaliação
+    infrequency: 0.30,     // Infrequência: 100 - (Presenças / Presença + Faltas)
+    learningDeficit: 0.20, // Déficit de Aprendizagem: 100 - Grau de Aprendizagem
+    dropoutRisk: 0.10,     // Risco de Evasão / Não Adesão às Avaliações (AV/SM)
   },
 };
+
+export const FORMULA_PRESETS: Record<'estacio' | 'mec' | 'retention' | 'rigor', FormulaWeights> = {
+  estacio: ESTACIO_PULSO2_WEIGHTS,
+  mec: {
+    presetId: 'mec',
+    presetName: 'Padrão MEC',
+    pulsoRuleVersion: '2.0',
+    lhi: {
+      learningScore: 0.30,
+      attendance: 0.30,
+      passRate: 0.25,
+      lmsAdherence: 0.15,
+    },
+    ars: {
+      failureRate: 0.35,
+      infrequency: 0.35,
+      learningDeficit: 0.20,
+      dropoutRisk: 0.10,
+    },
+  },
+  retention: {
+    presetId: 'retention',
+    presetName: 'Foco Retenção',
+    pulsoRuleVersion: '2.0',
+    lhi: {
+      learningScore: 0.25,
+      attendance: 0.35,
+      passRate: 0.20,
+      lmsAdherence: 0.20,
+    },
+    ars: {
+      failureRate: 0.30,
+      infrequency: 0.40,
+      learningDeficit: 0.15,
+      dropoutRisk: 0.15,
+    },
+  },
+  rigor: {
+    presetId: 'rigor',
+    presetName: 'Rigor Avaliativo',
+    pulsoRuleVersion: '2.0',
+    lhi: {
+      learningScore: 0.45,
+      attendance: 0.15,
+      passRate: 0.30,
+      lmsAdherence: 0.10,
+    },
+    ars: {
+      failureRate: 0.50,
+      infrequency: 0.15,
+      learningDeficit: 0.25,
+      dropoutRisk: 0.10,
+    },
+  },
+};
+
+export const DEFAULT_WEIGHTS: FormulaWeights = ESTACIO_PULSO2_WEIGHTS;
 
 export interface PulsoIndicatorConcept {
   id: string;
@@ -277,18 +342,27 @@ export function getRecommendedPedagogicalAction(item: DisciplineMetric): string 
 }
 
 /**
- * Recalculate metrics for an array of disciplines based on current weights
+ * Recalculate metrics for an array of disciplines based on current weights and Pulso 2.0 rules
  */
 export function recalculateAllMetrics(
   items: DisciplineMetric[],
   weights: FormulaWeights
 ): DisciplineMetric[] {
+  const isEstacioPulso2 = !weights.presetId || weights.presetId === 'estacio' || weights.pulsoRuleVersion !== '1.0';
+
   return items.map((item) => {
+    // No perfil Padrão Estácio (Pulso 2.0), a adesão digital consolida Adesão AV (AV, NC, AVS, NF)
+    // e Adesão SM (SM1 e SM2 a partir de 2024.1) quando disponíveis no relatório da turma.
+    const effectiveLmsAdherence =
+      isEstacioPulso2 && item.adhesionAV !== undefined && item.adhesionSM !== undefined
+        ? Number(((item.adhesionAV * 0.5) + (item.adhesionSM * 0.3) + (item.lmsAdherenceRate * 0.2)).toFixed(2))
+        : item.lmsAdherenceRate;
+
     const lhi = calculateLHI(
       item.learningScore,
       item.attendanceRate,
       item.failureRate,
-      item.lmsAdherenceRate,
+      effectiveLmsAdherence,
       weights.lhi
     );
     const ars = calculateARS(

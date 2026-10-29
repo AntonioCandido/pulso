@@ -37,7 +37,7 @@ interface IngestionViewProps {
 }
 
 interface SourceDeletionModalData {
-  type: 'pdf' | 'powerbi';
+  type: 'pdf' | 'powerbi' | 'template';
   identifier: string;
   displayName: string;
   associatedCount: number;
@@ -118,6 +118,24 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
       localStorage.setItem('pulso_user_pdf_docs_v6', JSON.stringify(pdfDocuments));
     } catch (e) {}
   }, [pdfDocuments]);
+
+  // Sample / Template Reports List state - allows deleting models with persistence
+  const [sampleReports, setSampleReports] = useState<PDFDocumentItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('pulso_sample_reports_v1');
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return AVAILABLE_SAMPLE_REPORTS;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('pulso_sample_reports_v1', JSON.stringify(sampleReports));
+    } catch (e) {}
+  }, [sampleReports]);
 
   // PDF Extraction states
   const [isExtracting, setIsExtracting] = useState(false);
@@ -463,6 +481,27 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
     setRemoveAssociatedDisciplines(true);
   };
 
+  const handlePromptDeleteSample = (sample: PDFDocumentItem) => {
+    const count = disciplines.filter(
+      (d) =>
+        d.sourceFileOrUrl.toLowerCase().includes(sample.fileName.toLowerCase()) ||
+        activeSession?.fileName === sample.fileName
+    ).length;
+    setItemToDelete({
+      type: 'template',
+      identifier: sample.fileName,
+      displayName: sample.fileName,
+      associatedCount: count,
+    });
+    setRemoveAssociatedDisciplines(true);
+  };
+
+  const handleRestoreSampleReports = () => {
+    setSampleReports(AVAILABLE_SAMPLE_REPORTS);
+    setActionNotice('Modelos oficiais de relatórios restaurados com sucesso.');
+    setTimeout(() => setActionNotice(null), 4000);
+  };
+
   const handlePromptDeleteBi = (conn: PowerBIConnectionConfig) => {
     const count = disciplines.filter((d) => d.sourceFileOrUrl === conn.reportUrl).length;
     setItemToDelete({
@@ -483,6 +522,13 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
         onClearAllImportedData();
       }
       setActionNotice(`Fonte PDF "${itemToDelete.displayName}" removida com sucesso.`);
+    } else if (itemToDelete.type === 'template') {
+      setSampleReports((prev: PDFDocumentItem[]) => prev.filter((s: PDFDocumentItem) => s.fileName !== itemToDelete.identifier));
+      setPdfDocuments((prev: PDFDocumentItem[]) => prev.filter((d: PDFDocumentItem) => d.fileName !== itemToDelete.identifier));
+      if (removeAssociatedDisciplines && itemToDelete.associatedCount > 0) {
+        onClearAllImportedData();
+      }
+      setActionNotice(`Modelo "${itemToDelete.displayName}" excluído com sucesso.`);
     } else {
       const updatedConns = config.biConnections.filter((c) => c.reportUrl !== itemToDelete.identifier);
       onUpdateConfig({
@@ -1103,62 +1149,113 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
                   Utilize os relatórios oficiais abaixo para alternar arquivos e validar que a substituição é 100% atômica, sem combinação de dados.
                 </p>
               </div>
+
+              {sampleReports.length < AVAILABLE_SAMPLE_REPORTS.length && (
+                <button
+                  onClick={handleRestoreSampleReports}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-md transition-colors shrink-0 cursor-pointer"
+                  title="Restaurar todos os modelos oficiais padrão"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Restaurar Modelos Padrão</span>
+                </button>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-              {AVAILABLE_SAMPLE_REPORTS.map((sample, sIdx) => {
-                const isCurrentlyActive = disciplines.length > 0 && (
-                  activeSession?.fileName === sample.fileName ||
-                  disciplines.some((d) => d.sourceFileOrUrl === sample.fileName)
-                );
+            {sampleReports.length === 0 ? (
+              <div className="p-6 text-center bg-slate-50 rounded-lg border border-dashed border-slate-300 space-y-2">
+                <p className="text-xs font-medium text-slate-600">
+                  Todos os modelos de relatório foram excluídos.
+                </p>
+                <button
+                  onClick={handleRestoreSampleReports}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Restaurar Modelos Oficiais</span>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                {sampleReports.map((sample) => {
+                  const isCurrentlyActive = disciplines.length > 0 && (
+                    activeSession?.fileName === sample.fileName ||
+                    disciplines.some((d) => d.sourceFileOrUrl === sample.fileName)
+                  );
 
-                return (
-                  <div
-                    key={sIdx}
-                    className={`p-3.5 rounded-lg border flex flex-col justify-between transition-colors ${
-                      isCurrentlyActive
-                        ? 'border-blue-400 bg-blue-50/50 shadow-xs'
-                        : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100/60'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 truncate">
-                          <FileText className={`w-3.5 h-3.5 ${isCurrentlyActive ? 'text-blue-600' : 'text-slate-500'}`} />
-                          <span className="truncate">{sample.fileName}</span>
-                        </div>
-                        {isCurrentlyActive && (
-                          <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300">
-                            Ativo
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-slate-600 leading-snug mb-3">
-                        {sample.description}
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => handleStageAndValidatePDF({ name: sample.fileName })}
-                      disabled={isExtracting}
-                      className={`w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                  return (
+                    <div
+                      key={sample.fileName}
+                      className={`p-3.5 rounded-lg border flex flex-col justify-between transition-colors ${
                         isCurrentlyActive
-                          ? 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
-                          : 'bg-blue-600 text-white hover:bg-blue-500 shadow-xs'
+                          ? 'border-blue-400 bg-blue-50/50 shadow-xs'
+                          : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100/60'
                       }`}
                     >
-                      <Play className="w-3 h-3" />
-                      <span>{isCurrentlyActive ? 'Revalidar Este Relatório' : 'Importar e Substituir Base'}</span>
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 min-w-0">
+                            <FileText className={`w-3.5 h-3.5 shrink-0 ${isCurrentlyActive ? 'text-blue-600' : 'text-slate-500'}`} />
+                            <span className="truncate" title={sample.fileName}>{sample.fileName}</span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {isCurrentlyActive && (
+                              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300">
+                                Ativo
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handlePromptDeleteSample(sample)}
+                              disabled={isExtracting}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                              title="Excluir modelo"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-snug mb-3">
+                          {sample.description}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleStageAndValidatePDF({ name: sample.fileName })}
+                          disabled={isExtracting}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                            isCurrentlyActive
+                              ? 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
+                              : 'bg-blue-600 text-white hover:bg-blue-500 shadow-xs'
+                          }`}
+                        >
+                          <Play className="w-3 h-3 shrink-0" />
+                          <span className="truncate">{isCurrentlyActive ? 'Revalidar Este Relatório' : 'Importar e Substituir Base'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handlePromptDeleteSample(sample)}
+                          disabled={isExtracting}
+                          className="flex items-center justify-center gap-1 py-1.5 px-2.5 text-xs font-semibold text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 hover:border-rose-300 rounded-md transition-colors shrink-0 cursor-pointer"
+                          title="Excluir este modelo"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Excluir</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* CONFIRMATION MODAL TO REMOVE SOURCE */}
+      {/* CONFIRMATION MODAL TO REMOVE SOURCE OR TEMPLATE */}
       {itemToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-md w-full p-6 animate-in fade-in zoom-in duration-150 text-xs">
@@ -1168,19 +1265,28 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900">
-                  Remover Fonte de Dados
+                  {itemToDelete.type === 'template' ? 'Excluir Modelo de Relatório' : 'Remover Fonte de Dados'}
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  Tem certeza que deseja remover esta fonte de dados do Pulso Acadêmico?
+                  {itemToDelete.type === 'template'
+                    ? 'Tem certeza que deseja excluir este modelo da lista de relatórios?'
+                    : 'Tem certeza que deseja remover esta fonte de dados do Pulso Acadêmico?'}
                 </p>
               </div>
             </div>
 
             <div className="mt-4 p-3 bg-slate-50 rounded-md border border-slate-200 font-medium text-slate-800 break-all">
-              <span className="text-slate-500 text-[11px] block">Fonte a ser removida:</span>
+              <span className="text-slate-500 text-[11px] block">
+                {itemToDelete.type === 'template' ? 'Modelo a ser excluído:' : 'Fonte a ser removida:'}
+              </span>
               <span className="font-semibold text-slate-900">{itemToDelete.displayName}</span>
               <div className="text-[11px] text-slate-500 mt-1">
-                Tipo: {itemToDelete.type === 'pdf' ? 'Relatório PDF Local' : 'Conector Power BI'}
+                Tipo:{' '}
+                {itemToDelete.type === 'template'
+                  ? 'Modelo de Relatório Oficial'
+                  : itemToDelete.type === 'pdf'
+                  ? 'Relatório PDF Local'
+                  : 'Conector Power BI'}
               </div>
             </div>
 
@@ -1209,16 +1315,16 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
               <button
                 type="button"
                 onClick={() => setItemToDelete(null)}
-                className="px-3.5 py-1.5 font-medium text-slate-600 hover:text-slate-800"
+                className="px-3.5 py-1.5 font-medium text-slate-600 hover:text-slate-800 cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDelete}
-                className="px-4 py-1.5 font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-md shadow-xs transition-colors"
+                className="px-4 py-1.5 font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-md shadow-xs transition-colors cursor-pointer"
               >
-                Confirmar Remoção
+                {itemToDelete.type === 'template' ? 'Confirmar Exclusão' : 'Confirmar Remoção'}
               </button>
             </div>
           </div>
