@@ -1409,68 +1409,8 @@ export function getDisciplinesForFile(
     }));
   }
 
-  // Custom file uploaded by user: infer campus or create distinct custom dataset
-  let campusName = 'CAMPUS PRINCIPAL';
-  if (lower.includes('barra')) campusName = 'BARRA DA TIJUCA';
-  else if (lower.includes('centro')) campusName = 'CENTRO I';
-  else if (lower.includes('madureira')) campusName = 'MADUREIRA';
-  else if (lower.includes('norte')) campusName = 'NORTE SHOPPING';
-  else {
-    const cleanName = fileName.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ').toUpperCase();
-    campusName = cleanName.length > 20 ? cleanName.substring(0, 20) : cleanName;
-  }
-
-  const customExecutiveSummary: PulsoExecutiveSummary = {
-    learningScore: 52.4,
-    learningScorePreviousYear: 48.0,
-    learningScoreTarget: 50.0,
-    failureRate: 6.5,
-    failureRatePreviousYear: 5.2,
-    failureRateTarget: 8.0,
-    studyTimeFormatted: '16:45',
-    studyTimePreviousYear: '18:30 A.A',
-    studyTimeTarget: '22:00',
-    adhesionAV: 84.5,
-    adhesionAVPreviousYear: 81.0,
-    adhesionAVTarget: 80.0,
-    adhesionSM: 66.2,
-    adhesionSMPreviousYear: 63.0,
-    adhesionSMTarget: 50.0,
-    attendanceRate: 81.2,
-    attendanceRatePreviousYear: 79.5,
-    attendanceRateTarget: 80.0,
-    brand: 'ESTÁCIO',
-    groupBrand: 'YDUQS / ESTÁCIO',
-    regional: 'UNESA',
-    campus: campusName,
-    course: 'Ciência da Computação',
-    operationType: 'OPERACAO PROPRIA',
-    poloType: 'UNIDADE PRESENCIAL',
-    entryYear: '1 a 3',
-  };
-
-  const baseItems = RAW_PULSO_IMPAR_R9_DISCIPLINES.map((d, idx) => ({
-    ...d,
-    id: `custom-file-${Date.now()}-${idx + 1}`,
-    campus: campusName,
-    regional: 'UNESA',
-    sourceFileOrUrl: fileName,
-    lastUpdated: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-  }));
-
-  return baseItems.map((d) => {
-    const lhi = calculateLHI(d.learningScore, d.attendanceRate, d.failureRate, d.lmsAdherenceRate, weights.lhi);
-    const ars = calculateARS(d.failureRate, d.attendanceRate, d.learningScore, d.dropoutRiskRate, weights.ars);
-    return {
-      ...d,
-      lhi,
-      ars,
-      lhiStatus: getLHIStatus(lhi),
-      arsLevel: getARSLevel(ars),
-      recommendedAction: getRecommendedPedagogicalAction({ ...d, lhi, ars } as DisciplineMetric),
-      executiveSummary: customExecutiveSummary,
-    };
-  });
+  // REGRA FUNDAMENTAL: Nunca inventar, completar, estimar ou clonar dados para arquivos desconhecidos.
+  return [];
 }
 
 // Power BI and PDF both resolve to authentic datasets

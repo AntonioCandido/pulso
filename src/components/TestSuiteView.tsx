@@ -20,6 +20,7 @@ import {
   calculatePulsoAttendanceRate,
   evaluateStudentFinalExpression
 } from '../utils/calculations';
+import { getDisciplinesForFile } from '../data/mockAcademicData';
 
 interface TestSuiteViewProps {
   weights: FormulaWeights;
@@ -135,6 +136,15 @@ export const TestSuiteView: React.FC<TestSuiteViewProps> = ({ weights }) => {
           return study.totalMinutes === 164 && study.formatted === '2:44' && freq === 80;
         },
       },
+      {
+        name: 'test_no_fabricated_data_for_unverified_files',
+        module: 'tests/test_pdf_parser.py',
+        assertion: 'Garante que arquivos não homologados/desconhecidos retornem lista vazia ([]), sem inventar ou clonar registros.',
+        fn: () => {
+          const unknown = getDisciplinesForFile('relatorio_nao_verificado_xyz.pdf', weights);
+          return Array.isArray(unknown) && unknown.length === 0;
+        },
+      },
     ];
 
     const results: TestSuiteResult[] = [];
@@ -211,7 +221,7 @@ export const TestSuiteView: React.FC<TestSuiteViewProps> = ({ weights }) => {
         <div className="text-slate-400 text-[11px] leading-relaxed">
           rootdir: /app/pulso_academico, configfile: pyproject.toml<br />
           plugins: cov-5.0.0, anyio-4.3.0<br />
-          collected 7 items
+          collected 10 items
         </div>
 
         {testResults && (

@@ -255,7 +255,7 @@ export default function App() {
             config={config}
             onUpdateConfig={setConfig}
             activeSession={activeSession}
-            onNavigateToSources={() => setActiveTab('ingestion')}
+            onNavigateToSources={() => setActiveTab('sources')}
           />
         )}
 

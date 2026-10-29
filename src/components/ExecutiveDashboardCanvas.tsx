@@ -36,18 +36,20 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
   const campusLabel = !hasData 
     ? '-- (Base Zerada)' 
     : activeSession?.campus
-    ? (activeSession.campus.startsWith('Campus') ? activeSession.campus : `Campus ${activeSession.campus}`)
+    ? (activeSession.campus.startsWith('Campus') || activeSession.campus.startsWith('Não informado') ? activeSession.campus : `Campus ${activeSession.campus}`)
     : executive?.campus 
     ? (executive.campus.startsWith('Campus') ? executive.campus : `Campus ${executive.campus}`)
-    : `Campus ${primaryDiscipline?.campus || 'Principal'} (${primaryDiscipline?.regional || 'UNESA'})`;
+    : primaryDiscipline?.campus
+    ? (primaryDiscipline.campus.startsWith('Campus') || primaryDiscipline.campus.startsWith('Não informado') ? primaryDiscipline.campus : `Campus ${primaryDiscipline.campus}`)
+    : 'Não informado na fonte';
 
   const courseLabel = !hasData
     ? 'CURSO: --'
-    : `CURSO: ${(activeSession?.course || executive?.course || primaryDiscipline?.course || 'CIÊNCIA DA COMPUTAÇÃO').toUpperCase()}`;
+    : `CURSO: ${(activeSession?.course || executive?.course || primaryDiscipline?.course || 'Não informado na fonte').toUpperCase()}`;
 
   const lastUpdatedText = !hasData 
     ? 'Base de dados limpa' 
-    : `Relatório: ${activeSession?.fileName || primaryDiscipline?.sourceFileOrUrl || 'Arquivo Selecionado'}`;
+    : `Fonte: ${activeSession?.fileName || primaryDiscipline?.sourceFileOrUrl || 'Não informado na fonte'}`;
 
   // 1. Tempo de Estudo
   const studyTimeDisplay = !hasData 
@@ -81,7 +83,13 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
       return { isPos, diffStr, pctStr, prevStr, targetStr };
     }
 
-    return { isPos: true, diffStr: '+1:00', pctStr: '+5,00% A.A.', prevStr: 'Ano Anterior (18:00 A.A.)', targetStr: 'Meta: 20:00' };
+    return {
+      isPos: null,
+      diffStr: '—',
+      pctStr: 'A.A. não informado na fonte',
+      prevStr: 'Ano Anterior: Não informado na fonte',
+      targetStr: 'Meta: Não informada na fonte',
+    };
   })();
 
   const studyTimeIsPositive = studyTimeCalculations.isPos;
@@ -108,11 +116,11 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
 
     const avg = disciplines.reduce((acc, curr) => acc + curr.attendanceRate, 0) / totalDisciplines;
     return {
-      isPos: true,
+      isPos: null,
       dispStr: `${avg.toFixed(2).replace('.', ',')} %`,
-      diffStr: '+1,50 %',
-      diffText: 'em relação à meta',
-      prevStr: 'Ano Anterior (75,00% A.A.)'
+      diffStr: '—',
+      diffText: 'A.A. não informado na fonte',
+      prevStr: 'Ano Anterior: Não informado na fonte'
     };
   })();
 
@@ -133,13 +141,13 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
     ? '0,00%' 
     : executive 
     ? `${executive.learningScorePreviousYear.toFixed(2).replace('.', ',')}%`
-    : '40,00%';
+    : 'Não informado';
 
   const learningTarget = !hasData 
     ? '0,00%' 
     : executive 
     ? `${executive.learningScoreTarget.toFixed(2).replace('.', ',')}%`
-    : '50,00%';
+    : 'Não informado';
 
   // 4. Reprovação Geral
   const failureRateDisplay = !hasData 
@@ -152,32 +160,38 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
     ? '0,00%' 
     : executive 
     ? `${executive.failureRatePreviousYear.toFixed(2).replace('.', ',')}%`
-    : '5,00%';
+    : 'Não informado';
 
   const failureTarget = !hasData 
     ? '0,00%' 
     : executive 
     ? `${executive.failureRateTarget.toFixed(2).replace('.', ',')}%`
-    : '0,00%';
+    : 'Não informado';
 
   // 5. Adesão AV & SM
+  const itemsWithAdhesionAV = disciplines.filter((d) => d.adhesionAV !== undefined);
   const adhesionAVDisplay = !hasData 
     ? '0,00%' 
     : executive 
     ? `${executive.adhesionAV.toFixed(2).replace('.', ',')}%`
-    : `${(disciplines.reduce((acc, curr) => acc + (curr.adhesionAV || 80), 0) / totalDisciplines).toFixed(2).replace('.', ',')}%`;
+    : itemsWithAdhesionAV.length > 0
+    ? `${(itemsWithAdhesionAV.reduce((acc, curr) => acc + (curr.adhesionAV || 0), 0) / itemsWithAdhesionAV.length).toFixed(2).replace('.', ',')}%`
+    : 'Não informado';
 
-  const adhesionAVTarget = !hasData ? '0,00%' : executive ? `${executive.adhesionAVTarget.toFixed(2).replace('.', ',')}%` : '80,00%';
-  const adhesionAVPrevious = !hasData ? '0,00%' : executive ? `${executive.adhesionAVPreviousYear.toFixed(2).replace('.', ',')}%` : '78,00%';
+  const adhesionAVTarget = !hasData ? '0,00%' : executive ? `${executive.adhesionAVTarget.toFixed(2).replace('.', ',')}%` : 'Não informado';
+  const adhesionAVPrevious = !hasData ? '0,00%' : executive ? `${executive.adhesionAVPreviousYear.toFixed(2).replace('.', ',')}%` : 'Não informado';
 
+  const itemsWithAdhesionSM = disciplines.filter((d) => d.adhesionSM !== undefined);
   const adhesionSMDisplay = !hasData 
     ? '0,00%' 
     : executive 
     ? `${executive.adhesionSM.toFixed(2).replace('.', ',')}%`
-    : `${(disciplines.reduce((acc, curr) => acc + (curr.adhesionSM || 65), 0) / totalDisciplines).toFixed(2).replace('.', ',')}%`;
+    : itemsWithAdhesionSM.length > 0
+    ? `${(itemsWithAdhesionSM.reduce((acc, curr) => acc + (curr.adhesionSM || 0), 0) / itemsWithAdhesionSM.length).toFixed(2).replace('.', ',')}%`
+    : 'Não informado';
 
-  const adhesionSMTarget = !hasData ? '0,00%' : executive ? `${executive.adhesionSMTarget.toFixed(2).replace('.', ',')}%` : '50,00%';
-  const adhesionSMPrevious = !hasData ? '0,00%' : executive ? `${executive.adhesionSMPreviousYear.toFixed(2).replace('.', ',')}%` : '60,00%';
+  const adhesionSMTarget = !hasData ? '0,00%' : executive ? `${executive.adhesionSMTarget.toFixed(2).replace('.', ',')}%` : 'Não informado';
+  const adhesionSMPrevious = !hasData ? '0,00%' : executive ? `${executive.adhesionSMPreviousYear.toFixed(2).replace('.', ',')}%` : 'Não informado';
 
   // 6. LHI & ARS
   const avgLHI = !hasData ? '0.0' : (disciplines.reduce((acc, curr) => acc + curr.lhi, 0) / totalDisciplines).toFixed(1);

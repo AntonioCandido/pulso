@@ -43,7 +43,7 @@ export interface DisciplineMetric {
   arsLevel: ARSLevel;
   
   // Audit Trail & Governance (RF04)
-  sourceType: 'Power BI HTTPS' | 'Relatório PDF Local' | 'Ajuste Manual';
+  sourceType: 'Power BI HTTPS' | 'Relatório PDF Local' | 'Ajuste Manual' | 'Planilha Exportada';
   sourceFileOrUrl: string;
   lastUpdated: string;
   importId?: string;
@@ -51,6 +51,13 @@ export interface DisciplineMetric {
   auditNote?: string;
   recommendedAction?: string;
   executiveSummary?: PulsoExecutiveSummary;
+  missingFields?: string[];
+  originalValues?: {
+    learningScore: number;
+    failureRate: number;
+    attendanceRate: number;
+    lmsAdherenceRate: number;
+  };
 }
 
 export interface ImportSession {
