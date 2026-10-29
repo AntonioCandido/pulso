@@ -46,9 +46,26 @@ export interface DisciplineMetric {
   sourceType: 'Power BI HTTPS' | 'Relatório PDF Local' | 'Ajuste Manual';
   sourceFileOrUrl: string;
   lastUpdated: string;
+  importId?: string;
   isManuallyAdjusted?: boolean;
   auditNote?: string;
   recommendedAction?: string;
+  executiveSummary?: PulsoExecutiveSummary;
+}
+
+export interface ImportSession {
+  importId: string;
+  version: number;
+  fileName: string;
+  fileSize?: string;
+  importedAt: string;
+  sourceType: 'PDF' | 'POWER_BI';
+  totalRecords: number;
+  totalStudents: number;
+  campus: string;
+  course: string;
+  studyTimeFormatted: string;
+  attendanceRate: number;
 }
 
 export interface PulsoExecutiveSummary {

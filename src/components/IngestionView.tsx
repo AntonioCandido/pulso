@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   FileUp, 
   Link2, 
@@ -22,16 +22,16 @@ import {
   X
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { DisciplineMetric, FormulaWeights, SystemConfig, PowerBIConnectionConfig, AcademicCourse } from '../types';
+import { DisciplineMetric, FormulaWeights, SystemConfig, PowerBIConnectionConfig, AcademicCourse, ImportSession } from '../types';
 import { extractMetricsFromPDF, ExtractionProgress } from '../utils/pdfParser';
 import { USER_POWERBI_URL, getPowerBiSynchronizedData } from '../data/mockAcademicData';
 import { calculateLHI, calculateARS, getLHIStatus, getARSLevel, getRecommendedPedagogicalAction } from '../utils/calculations';
 
 interface IngestionViewProps {
   disciplines: DisciplineMetric[];
-  onAddDisciplines: (newItems: DisciplineMetric[]) => void;
-  onRemoveDisciplinesBySource?: (sourceIdentifier: string) => void;
-  onClearAllData?: (clearSourcesAlso?: boolean) => void;
+  activeSession: ImportSession | null;
+  onReplaceImportData: (newItems: DisciplineMetric[], sessionMeta: ImportSession) => void;
+  onClearAllImportedData: () => void;
   config: SystemConfig;
   onUpdateConfig: (newConfig: SystemConfig) => void;
 }
@@ -43,7 +43,7 @@ interface SourceDeletionModalData {
   associatedCount: number;
 }
 
-interface PDFDocumentItem {
+export interface PDFDocumentItem {
   fileName: string;
   description: string;
   recordCount: number;
@@ -51,11 +51,40 @@ interface PDFDocumentItem {
   uploadedDate: string;
 }
 
+interface PendingImportData {
+  items: DisciplineMetric[];
+  sessionMeta: ImportSession;
+}
+
+export const AVAILABLE_SAMPLE_REPORTS: PDFDocumentItem[] = [
+  {
+    fileName: 'Pulso Acadêmico IMPAR R9.pdf',
+    description: 'Relatório Oficial Campus R9 - Taquara · 21:50 de estudo, 78,89% freq, 103 alunos (Ciência da Computação)',
+    recordCount: 15,
+    fileSize: '245 KB',
+    uploadedDate: '2026-10-29',
+  },
+  {
+    fileName: 'Pulso Acadêmico - Taquara (Final).pdf',
+    description: 'Relatório Oficial Campus R9 - Taquara · 14:39 de estudo, 68,36% freq, 68 alunos (Ciência da Computação)',
+    recordCount: 15,
+    fileSize: '184 KB',
+    uploadedDate: '2026-10-20',
+  },
+  {
+    fileName: 'Pulso Acadêmico TOM JOBIM.pdf',
+    description: 'Relatório Oficial Campus TOM JOBIM · 18:56 de estudo, 85,78% freq, 107 alunos (Ciência da Computação)',
+    recordCount: 15,
+    fileSize: '312 KB',
+    uploadedDate: '2026-10-15',
+  },
+];
+
 export const IngestionView: React.FC<IngestionViewProps> = ({
   disciplines,
-  onAddDisciplines,
-  onRemoveDisciplinesBySource,
-  onClearAllData,
+  activeSession,
+  onReplaceImportData,
+  onClearAllImportedData,
   config,
   onUpdateConfig,
 }) => {
@@ -69,29 +98,24 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
   const [isSyncingBi, setIsSyncingBi] = useState(false);
   const [syncStep, setSyncStep] = useState<string | null>(null);
 
-  // PDF Documents List state
+  // File input ref for resetting DOM file picker
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // PDF Documents List state - includes imported reports or empty state when cleared
   const [pdfDocuments, setPdfDocuments] = useState<PDFDocumentItem[]>(() => {
     try {
-      const saved = localStorage.getItem('pulso_user_pdf_docs_v4');
-      if (saved) {
+      const saved = localStorage.getItem('pulso_user_pdf_docs_v6');
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {}
-    return [
-      {
-        fileName: 'Pulso Acadêmico IMPAR.pdf',
-        description: 'Relatório Executivo Oficial YDUQS / ESTÁCIO · Campus TOM JOBIM (Ciência da Computação)',
-        recordCount: 15,
-        fileSize: '152 KB',
-        uploadedDate: '2026-10-28',
-      },
-    ];
+    return [];
   });
 
   useEffect(() => {
     try {
-      localStorage.setItem('pulso_user_pdf_docs_v4', JSON.stringify(pdfDocuments));
+      localStorage.setItem('pulso_user_pdf_docs_v6', JSON.stringify(pdfDocuments));
     } catch (e) {}
   }, [pdfDocuments]);
 
@@ -102,6 +126,10 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
   const [simulateException, setSimulateException] = useState(false);
   const [lastExtractedCount, setLastExtractedCount] = useState<number | null>(null);
 
+  // Atomic Confirmation & Staged Import state
+  const [pendingImport, setPendingImport] = useState<PendingImportData | null>(null);
+  const [showConfirmImportModal, setShowConfirmImportModal] = useState(false);
+
   // Deletion Modal state
   const [itemToDelete, setItemToDelete] = useState<SourceDeletionModalData | null>(null);
   const [removeAssociatedDisciplines, setRemoveAssociatedDisciplines] = useState(true);
@@ -109,7 +137,6 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
 
   // Clear Entire Database Modal state
   const [showClearDatabaseModal, setShowClearDatabaseModal] = useState(false);
-  const [clearSourcesWithDatabase, setClearSourcesWithDatabase] = useState(false);
 
   // Primary Power BI Connection (Tenant Estácio / Yduqs)
   const primaryBi = config.biConnections.find((c) => c.reportUrl.includes('f97e7c8e')) || config.biConnections[0];
@@ -167,7 +194,22 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
 
     // Extract real academic indicators mapped from the configured Power BI report
     const syncedPowerBiData = getPowerBiSynchronizedData(config.weights);
-    onAddDisciplines(syncedPowerBiData);
+    const exec = syncedPowerBiData[0]?.executiveSummary;
+    const sessionMeta: ImportSession = {
+      importId: `pbi_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      version: Date.now(),
+      fileName: 'Power BI - Pulso Acadêmico (YDUQS/Estácio)',
+      fileSize: 'Live API',
+      importedAt: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      sourceType: 'POWER_BI',
+      totalRecords: syncedPowerBiData.length,
+      totalStudents: syncedPowerBiData.reduce((acc, curr) => acc + curr.totalStudents, 0),
+      campus: exec?.campus || 'Campus R9 – Taquara',
+      course: exec?.course || 'Ciência da Computação',
+      studyTimeFormatted: exec?.studyTimeFormatted || '21:50',
+      attendanceRate: exec?.attendanceRate || 78.89,
+    };
+    onReplaceImportData(syncedPowerBiData, sessionMeta);
 
     setIsSyncingBi(false);
     setSyncStep(null);
@@ -274,11 +316,23 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
           };
         });
 
-        onAddDisciplines(newItems);
-        setBiTestResult({
-          status: 'success',
-          message: `Sucesso: ${newItems.length} disciplinas importadas e calculadas a partir da exportação do Power BI!`,
-        });
+        const sessionMeta: ImportSession = {
+          importId: `pbi_export_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          version: Date.now(),
+          fileName: file.name,
+          fileSize: `${(file.size / 1024).toFixed(0)} KB`,
+          importedAt: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          sourceType: 'POWER_BI',
+          totalRecords: newItems.length,
+          totalStudents: newItems.reduce((acc, curr) => acc + curr.totalStudents, 0),
+          campus: 'Campus Principal (Exportação)',
+          course: 'Ciência da Computação',
+          studyTimeFormatted: '18:00',
+          attendanceRate: 85.0,
+        };
+
+        setPendingImport({ items: newItems, sessionMeta });
+        setShowConfirmImportModal(true);
       } catch (err: any) {
         setBiTestResult({
           status: 'error',
@@ -289,8 +343,11 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
     reader.readAsArrayBuffer(file);
   };
 
-  // Handlers for PDF
-  const handleExtractPDF = async (fileObj: { name: string; size?: number } | File) => {
+  // =========================================================================
+  // ATOMIC VALIDATION & STAGING ROUTINE (Step 1 of Import Lifecycle)
+  // Extracts and validates without mutating active application state.
+  // =========================================================================
+  const handleStageAndValidatePDF = async (fileObj: { name: string; size?: number } | File) => {
     setIsExtracting(true);
     setExtractionError(null);
     setExtractionProgress(null);
@@ -304,33 +361,93 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
         simulateException
       );
 
-      // Also ensure this PDF is in pdfDocuments list if it wasn't there
-      if (!pdfDocuments.some((d: PDFDocumentItem) => d.fileName === fileObj.name)) {
-        setPdfDocuments((prev: PDFDocumentItem[]) => [
-          ...prev,
-          {
-            fileName: fileObj.name,
-            description: 'Relatório importado localmente pelo usuário',
-            recordCount: extracted.length,
-            fileSize: fileObj.size ? `${(fileObj.size / (1024 * 1024)).toFixed(1)} MB` : '1.5 MB',
-            uploadedDate: new Date().toISOString().slice(0, 10),
-          },
-        ]);
+      if (!extracted || extracted.length === 0) {
+        throw new Error(`Nenhum registro de turma válido pôde ser extraído do documento "${fileObj.name}".`);
       }
 
-      onAddDisciplines(extracted);
+      const exec = extracted[0]?.executiveSummary;
+      const totalStudents = extracted.reduce((acc, curr) => acc + curr.totalStudents, 0);
+
+      const sessionMeta: ImportSession = {
+        importId: `import_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        version: Date.now(),
+        fileName: fileObj.name,
+        fileSize: fileObj.size ? `${(fileObj.size / 1024).toFixed(0)} KB` : '245 KB',
+        importedAt: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        sourceType: 'PDF',
+        totalRecords: extracted.length,
+        totalStudents,
+        campus: exec?.campus || extracted[0]?.campus || 'Campus Principal',
+        course: exec?.course || extracted[0]?.course || 'Ciência da Computação',
+        studyTimeFormatted: exec?.studyTimeFormatted || '21:50',
+        attendanceRate: exec?.attendanceRate || 78.89,
+      };
+
+      // Stage new data cleanly; DO NOT commit to state yet
+      setPendingImport({
+        items: extracted,
+        sessionMeta,
+      });
+
+      // Open explicit confirmation modal
+      setShowConfirmImportModal(true);
       setLastExtractedCount(extracted.length);
     } catch (err: any) {
+      // On failure: existing active dataset is 100% UNTOUCHED
       setExtractionError(err?.message || 'Erro ao processar relatório PDF.');
+      setPendingImport(null);
     } finally {
       setIsExtracting(false);
+      // Reset input DOM element so selecting the same file repeatedly always triggers onChange
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      handleExtractPDF(file);
+      handleStageAndValidatePDF(file);
+    }
+  };
+
+  // =========================================================================
+  // ATOMIC CONFIRMATION (Step 2 of Import Lifecycle)
+  // Commits newly staged data, replacing old data completely via central routine.
+  // =========================================================================
+  const handleConfirmPendingImport = () => {
+    if (!pendingImport) return;
+
+    // Call single central routine to atomically replace dataset
+    onReplaceImportData(pendingImport.items, pendingImport.sessionMeta);
+
+    // Update imported document card to represent this single active document
+    setPdfDocuments([
+      {
+        fileName: pendingImport.sessionMeta.fileName,
+        description: `Relatório Ativo · ${pendingImport.sessionMeta.campus} (${pendingImport.sessionMeta.studyTimeFormatted} estudo, ${pendingImport.sessionMeta.attendanceRate.toFixed(2).replace('.', ',')}% freq)`,
+        recordCount: pendingImport.sessionMeta.totalRecords,
+        fileSize: pendingImport.sessionMeta.fileSize || '245 KB',
+        uploadedDate: new Date().toISOString().slice(0, 10),
+      }
+    ]);
+
+    setActionNotice(`Importação confirmada! O arquivo "${pendingImport.sessionMeta.fileName}" (${pendingImport.sessionMeta.campus}) substituiu integralmente a base anterior.`);
+    setShowConfirmImportModal(false);
+    setPendingImport(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    setTimeout(() => setActionNotice(null), 5000);
+  };
+
+  // Cancel pending import without altering any state
+  const handleCancelPendingImport = () => {
+    setPendingImport(null);
+    setShowConfirmImportModal(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -362,8 +479,8 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
 
     if (itemToDelete.type === 'pdf') {
       setPdfDocuments((prev: PDFDocumentItem[]) => prev.filter((d: PDFDocumentItem) => d.fileName !== itemToDelete.identifier));
-      if (removeAssociatedDisciplines && onRemoveDisciplinesBySource) {
-        onRemoveDisciplinesBySource(itemToDelete.identifier);
+      if (removeAssociatedDisciplines) {
+        onClearAllImportedData();
       }
       setActionNotice(`Fonte PDF "${itemToDelete.displayName}" removida com sucesso.`);
     } else {
@@ -372,8 +489,8 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
         ...config,
         biConnections: updatedConns,
       });
-      if (removeAssociatedDisciplines && onRemoveDisciplinesBySource) {
-        onRemoveDisciplinesBySource(itemToDelete.identifier);
+      if (removeAssociatedDisciplines) {
+        onClearAllImportedData();
       }
       setActionNotice(`Conexão Power BI "${itemToDelete.displayName}" removida com sucesso.`);
     }
@@ -382,13 +499,35 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
     setItemToDelete(null);
   };
 
+  // =========================================================================
+  // CENTRAL ROUTINE: Clear Entire Database and Reset Import Area
+  // Wipes all data while strictly preserving configurations & metadata.
+  // =========================================================================
   const handleConfirmClearDatabase = () => {
-    if (onClearAllData) {
-      onClearAllData(clearSourcesWithDatabase);
+    // 1. Central routine in App.tsx wipes state, activeSession and local storage
+    onClearAllImportedData();
+
+    // 2. Wipe all local component states, staging, and messages
+    setPdfDocuments([]);
+    setIsExtracting(false);
+    setExtractionProgress(null);
+    setExtractionError(null);
+    setLastExtractedCount(null);
+    setPendingImport(null);
+    setShowConfirmImportModal(false);
+    setBiTestResult(null);
+    setIsSyncingBi(false);
+    setSyncStep(null);
+    setItemToDelete(null);
+
+    // 3. Reset file input element
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
+
     setShowClearDatabaseModal(false);
-    setActionNotice('Base de dados zerada com sucesso. Todas as turmas e métricas foram limpas.');
-    setTimeout(() => setActionNotice(null), 4000);
+    setActionNotice('Base de dados e dados importados foram removidos com sucesso. A área de importação retornou ao estado inicial. As configurações e metadados persistentes foram mantidos intactos.');
+    setTimeout(() => setActionNotice(null), 5000);
   };
 
   return (
@@ -774,6 +913,7 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
             {/* Dropzone */}
             <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:bg-slate-50/50 transition-colors relative">
               <input
+                ref={fileInputRef}
                 type="file"
                 accept=".pdf"
                 onChange={handleFileUpload}
@@ -860,24 +1000,37 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {pdfDocuments.map((doc: PDFDocumentItem, idx: number) => {
-                  const associatedDisciplines = disciplines.filter((d) =>
-                    d.sourceFileOrUrl.toLowerCase().includes(doc.fileName.toLowerCase())
+                  const isActive = disciplines.length > 0 && (
+                    activeSession?.fileName === doc.fileName ||
+                    disciplines.some((d) => d.sourceFileOrUrl === doc.fileName)
                   );
 
                   return (
                     <div
                       key={idx}
-                      className="p-4 rounded-lg border border-slate-200 hover:border-slate-300 transition-all bg-slate-50/50 flex flex-col justify-between"
+                      className={`p-4 rounded-lg border transition-all flex flex-col justify-between ${
+                        isActive 
+                          ? 'border-blue-400 bg-blue-50/40 shadow-xs ring-1 ring-blue-300' 
+                          : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                      }`}
                     >
                       <div>
                         {/* Header with Title and Remove Source Button */}
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <div className="flex items-center gap-2 min-w-0">
-                            <FileText className="w-4 h-4 text-rose-600 shrink-0" />
+                            <FileText className={`w-4 h-4 shrink-0 ${isActive ? 'text-blue-600' : 'text-slate-600'}`} />
                             <span className="font-semibold text-xs text-slate-900 truncate" title={doc.fileName}>
                               {doc.fileName}
                             </span>
                           </div>
+
+                          {/* Status Badge */}
+                          {isActive && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                              <Check className="w-3 h-3" />
+                              Ativo
+                            </span>
+                          )}
 
                           {/* REMOVE SOURCE BUTTON */}
                           <button
@@ -900,10 +1053,10 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
                           <span>{doc.fileSize}</span>
                           <span aria-hidden="true">·</span>
                           <span>{doc.recordCount} turmas</span>
-                          {associatedDisciplines.length > 0 && (
+                          {isActive && (
                             <>
                               <span aria-hidden="true">·</span>
-                              <span className="text-emerald-700 font-semibold">{associatedDisciplines.length} no grid</span>
+                              <span className="text-blue-700 font-semibold">{disciplines.length} no grid</span>
                             </>
                           )}
                         </div>
@@ -911,18 +1064,22 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
 
                       <div className="mt-4 flex items-center gap-2">
                         <button
-                          onClick={() => handleExtractPDF({ name: doc.fileName })}
+                          onClick={() => handleStageAndValidatePDF({ name: doc.fileName })}
                           disabled={isExtracting}
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-200 hover:bg-slate-100 rounded-md transition-colors"
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                            isActive
+                              ? 'text-slate-800 bg-white border border-slate-300 hover:bg-slate-100 shadow-2xs'
+                              : 'text-white bg-blue-600 hover:bg-blue-500 shadow-xs'
+                          }`}
                         >
-                          <Play className="w-3 h-3 text-blue-600" />
-                          <span>Reexecutar Extração</span>
+                          <Play className="w-3 h-3" />
+                          <span>{isActive ? 'Revalidar Relatório' : 'Importar e Substituir'}</span>
                         </button>
 
                         <button
                           onClick={() => handlePromptDeletePdf(doc)}
                           disabled={isExtracting}
-                          className="p-2 text-slate-400 hover:text-rose-600 bg-white border border-slate-200 hover:border-rose-200 hover:bg-rose-50 rounded-md transition-colors"
+                          className="p-2 text-slate-400 hover:text-rose-600 bg-white border border-slate-200 hover:border-rose-200 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
                           title="Remover documento"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -934,6 +1091,70 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
               </div>
             </div>
           )}
+
+          {/* Official Templates for Regression Testing & Coordinator Quick Test */}
+          <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Modelos Oficiais de Relatórios YDUQS / ESTÁCIO (Para Teste & Validação da Substituição)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Utilize os relatórios oficiais abaixo para alternar arquivos e validar que a substituição é 100% atômica, sem combinação de dados.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+              {AVAILABLE_SAMPLE_REPORTS.map((sample, sIdx) => {
+                const isCurrentlyActive = disciplines.length > 0 && (
+                  activeSession?.fileName === sample.fileName ||
+                  disciplines.some((d) => d.sourceFileOrUrl === sample.fileName)
+                );
+
+                return (
+                  <div
+                    key={sIdx}
+                    className={`p-3.5 rounded-lg border flex flex-col justify-between transition-colors ${
+                      isCurrentlyActive
+                        ? 'border-blue-400 bg-blue-50/50 shadow-xs'
+                        : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 truncate">
+                          <FileText className={`w-3.5 h-3.5 ${isCurrentlyActive ? 'text-blue-600' : 'text-slate-500'}`} />
+                          <span className="truncate">{sample.fileName}</span>
+                        </div>
+                        {isCurrentlyActive && (
+                          <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300">
+                            Ativo
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-600 leading-snug mb-3">
+                        {sample.description}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => handleStageAndValidatePDF({ name: sample.fileName })}
+                      disabled={isExtracting}
+                      className={`w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                        isCurrentlyActive
+                          ? 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
+                          : 'bg-blue-600 text-white hover:bg-blue-500 shadow-xs'
+                      }`}
+                    >
+                      <Play className="w-3 h-3" />
+                      <span>{isCurrentlyActive ? 'Revalidar Este Relatório' : 'Importar e Substituir Base'}</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 
@@ -1014,54 +1235,138 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900">
-                  Limpar Toda a Base de Dados?
+                  Limpar Base de Dados e Dados Importados?
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  Esta ação irá zerar todas as informações, turmas e indicadores educacionais consolidados.
+                  Confirmação de limpeza completa de dados capturados e importações anteriores.
                 </p>
               </div>
             </div>
 
-            <div className="mt-4 p-3 bg-rose-50 rounded-md border border-rose-200 text-rose-900">
-              <div className="font-semibold">Atenção da Coordenação:</div>
-              <p className="text-[11px] text-rose-800 mt-1">
-                Atualmente existem <strong>{disciplines.length} turmas</strong> com indicadores calculados (LHI/ARS). Ao confirmar, todos os registros serão apagados para permitir um novo ciclo limpo de extração.
-              </p>
+            <div className="mt-4 p-3 bg-rose-50 rounded-md border border-rose-200 text-rose-900 space-y-1.5">
+              <div className="font-semibold text-rose-950">Serão removidos:</div>
+              <ul className="list-disc list-inside text-[11px] text-rose-800 space-y-0.5">
+                <li>Dados extraídos de PDFs e resultados exibidos no Dashboard ({disciplines.length} turmas);</li>
+                <li>Metadados e relatórios PDF em memória e no armazenamento local;</li>
+                <li>Variáveis temporárias, filtros, cálculos e indicadores derivados.</li>
+              </ul>
             </div>
 
-            <div className="mt-3 p-3 bg-slate-50 rounded-md border border-slate-200">
-              <label className="flex items-start gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={clearSourcesWithDatabase}
-                  onChange={(e) => setClearSourcesWithDatabase(e.target.checked)}
-                  className="mt-0.5 rounded text-rose-600 focus:ring-0"
-                />
-                <div>
-                  <span className="font-semibold text-slate-900">
-                    Também desvincular conexões e histórico de relatórios
-                  </span>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Se desmarcado, as conexões de BI e a lista de relatórios PDF serão mantidas para novas importações.
-                  </p>
-                </div>
-              </label>
+            <div className="mt-3 p-3 bg-blue-50/80 rounded-md border border-blue-200 text-blue-900">
+              <div className="font-semibold text-blue-950 text-[11px]">Serão mantidos intactos:</div>
+              <p className="text-[11px] text-blue-800 mt-0.5">
+                Configurações e metadados de "Persistência Avançada de Configurações & Metadados" (pesos de fórmulas, metadados institucionais da coordenação e parâmetros de sistema).
+              </p>
             </div>
 
             <div className="mt-5 flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setShowClearDatabaseModal(false)}
-                className="px-3.5 py-1.5 font-medium text-slate-600 hover:text-slate-800"
+                className="px-3.5 py-1.5 font-medium text-slate-600 hover:text-slate-800 cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleConfirmClearDatabase}
-                className="px-4 py-1.5 font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-md shadow-xs transition-colors"
+                className="px-4 py-1.5 font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-md shadow-xs transition-colors cursor-pointer"
               >
-                Confirmar e Zerar Base
+                Confirmar e Limpar Dados
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* CONFIRMATION MODAL TO REPLACE ENTIRE IMPORT DATA */}
+      {showConfirmImportModal && pendingImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-lg w-full p-6 animate-in fade-in zoom-in duration-150 text-xs">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-full bg-blue-100 text-blue-600 shrink-0">
+                <FileText className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Confirmar Importação & Substituição da Base
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Validação concluída. Deseja substituir integralmente a base de dados ativa por este relatório?
+                </p>
+              </div>
+            </div>
+
+            {/* Document Details Card */}
+            <div className="mt-4 p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
+                <span className="text-slate-500 font-medium">Arquivo Analisado:</span>
+                <span className="font-bold text-slate-900 truncate max-w-[240px]" title={pendingImport.sessionMeta.fileName}>
+                  {pendingImport.sessionMeta.fileName}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                <div>
+                  <span className="text-slate-500 block">Campus Identificado:</span>
+                  <span className="font-semibold text-slate-800">{pendingImport.sessionMeta.campus}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Curso:</span>
+                  <span className="font-semibold text-slate-800">{pendingImport.sessionMeta.course}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Tempo de Estudo (Consolidado):</span>
+                  <span className="font-bold text-blue-700 font-mono">{pendingImport.sessionMeta.studyTimeFormatted}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Frequência Média:</span>
+                  <span className="font-bold text-emerald-700 font-mono">
+                    {pendingImport.sessionMeta.attendanceRate.toFixed(2).replace('.', ',')}%
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Total de Turmas:</span>
+                  <span className="font-semibold text-slate-800">{pendingImport.sessionMeta.totalRecords} disciplinas</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Total de Alunos:</span>
+                  <span className="font-semibold text-slate-800">{pendingImport.sessionMeta.totalStudents} matriculados</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Substitution Guarantee Notice */}
+            <div className="mt-3.5 p-3 bg-amber-50 rounded-md border border-amber-200 text-amber-900 space-y-1">
+              <div className="font-bold text-amber-950 flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Substituição Atômica Completa</span>
+              </div>
+              <p className="text-[11px] text-amber-800 leading-relaxed">
+                {disciplines.length > 0
+                  ? `A base atual contém ${disciplines.length} turmas. Ao confirmar, todos os dados, rankings e indicadores anteriores serão removidos e substituídos exclusivamente pelos registros deste arquivo. Nenhum registro anterior será mesclado ou reutilizado.`
+                  : 'A base de dados atual está zerada. Os indicadores deste relatório serão carregados como a fonte ativa do Dashboard.'}
+              </p>
+            </div>
+
+            <div className="mt-3 p-2.5 bg-blue-50/70 rounded-md border border-blue-200 text-[11px] text-blue-900">
+              <span className="font-semibold">Preservação:</span> Os pesos de fórmulas matemáticas (LHI/ARS) e metadados institucionais da coordenação permanecerão intactos.
+            </div>
+
+            {/* Actions */}
+            <div className="mt-5 flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={handleCancelPendingImport}
+                className="px-3.5 py-1.5 font-medium text-slate-600 hover:text-slate-800 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPendingImport}
+                className="px-4 py-1.5 font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-md shadow-xs transition-colors cursor-pointer"
+              >
+                Confirmar e Substituir Dados
               </button>
             </div>
           </div>

@@ -23,7 +23,6 @@ interface AuditGridViewProps {
   disciplines: DisciplineMetric[];
   onUpdateDiscipline: (updated: DisciplineMetric) => void;
   onBatchUpdateDisciplines: (updatedItems: DisciplineMetric[]) => void;
-  onClearAllData?: (clearSourcesAlso?: boolean) => void;
   weights: FormulaWeights;
   initialCourseFilter?: AcademicCourse | null;
   initialRiskOnly?: boolean;
@@ -33,7 +32,6 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
   disciplines,
   onUpdateDiscipline,
   onBatchUpdateDisciplines,
-  onClearAllData,
   weights,
   initialCourseFilter = null,
   initialRiskOnly = false,
@@ -224,20 +222,7 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
             </div>
           )}
 
-          {disciplines.length > 0 && onClearAllData && (
-            <button
-              onClick={() => {
-                if (window.confirm(`Tem certeza que deseja zerar todas as ${disciplines.length} turmas da base de dados?`)) {
-                  onClearAllData();
-                }
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-md transition-colors shadow-xs"
-              title="Zerar todas as informações e registros da base de dados"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-              <span>Limpar Base de Dados</span>
-            </button>
-          )}
+
         </div>
       </div>
 

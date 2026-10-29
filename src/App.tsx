@@ -6,30 +6,39 @@ import { AuditGridView } from './components/AuditGridView';
 import { FormulaEngineView } from './components/FormulaEngineView';
 import { ReportingView } from './components/ReportingView';
 import { TestSuiteView } from './components/TestSuiteView';
-import { DisciplineMetric, SystemConfig, AcademicCourse, FormulaWeights } from './types';
-import { INITIAL_DISCIPLINES, INITIAL_SYSTEM_CONFIG } from './data/mockAcademicData';
+import { DisciplineMetric, SystemConfig, AcademicCourse, FormulaWeights, ImportSession } from './types';
+import { INITIAL_SYSTEM_CONFIG } from './data/mockAcademicData';
 import { exportAnalyticalWorkbook, exportPowerPointDeck } from './utils/calculations';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
 
-  // Disciplines state (populated with authentic Pulso Acadêmico IMPAR data)
+  // Active Import Session (Unique identifier and metadata of the currently imported dataset)
+  const [activeSession, setActiveSession] = useState<ImportSession | null>(() => {
+    try {
+      const saved = localStorage.getItem('pulso_active_session_v6');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return null;
+  });
+
+  // Disciplines state (default is [] zerado, as requested: "Zerar os valores como default")
   const [disciplines, setDisciplines] = useState<DisciplineMetric[]>(() => {
     try {
-      const saved = localStorage.getItem('pulso_disciplines_v4');
+      const saved = localStorage.getItem('pulso_disciplines_v6');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0 && parsed.some(d => d.code === 'TMS0024')) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed;
         }
       }
     } catch (e) {
       // fallback
     }
-    return INITIAL_DISCIPLINES;
+    return [];
   });
 
-  // Config state
+  // Config state (Persistência Avançada de Configurações & Metadados)
   const [config, setConfig] = useState<SystemConfig>(() => {
     try {
       const saved = localStorage.getItem('pulso_config_v3');
@@ -50,12 +59,26 @@ export default function App() {
   const [auditCourseFilter, setAuditCourseFilter] = useState<AcademicCourse | null>(null);
   const [auditRiskOnly, setAuditRiskOnly] = useState<boolean>(false);
 
-  // Sync to local storage
+  // Sync state to local storage (single source of truth under v6)
   useEffect(() => {
     try {
-      localStorage.setItem('pulso_disciplines_v4', JSON.stringify(disciplines));
+      if (disciplines.length > 0) {
+        localStorage.setItem('pulso_disciplines_v6', JSON.stringify(disciplines));
+      } else {
+        localStorage.removeItem('pulso_disciplines_v6');
+      }
     } catch (e) {}
   }, [disciplines]);
+
+  useEffect(() => {
+    try {
+      if (activeSession) {
+        localStorage.setItem('pulso_active_session_v6', JSON.stringify(activeSession));
+      } else {
+        localStorage.removeItem('pulso_active_session_v6');
+      }
+    } catch (e) {}
+  }, [activeSession]);
 
   useEffect(() => {
     try {
@@ -63,33 +86,72 @@ export default function App() {
     } catch (e) {}
   }, [config]);
 
-  // Handlers
-  const handleAddDisciplines = (newItems: DisciplineMetric[]) => {
-    setDisciplines((prev) => {
-      const prevFiltered = prev.filter((p) => !newItems.some((n) => n.id === p.id));
-      return [...newItems, ...prevFiltered];
-    });
-  };
+  // =========================================================================
+  // CENTRAL ROUTINE: Replace Import Data Atomically
+  // Replaces the entire imported dataset with zero leftovers from previous files.
+  // =========================================================================
+  const handleReplaceImportData = (newItems: DisciplineMetric[], sessionMeta: ImportSession) => {
+    // 1. Tag all new items with the new unique importId and timestamp
+    const taggedItems = newItems.map((item) => ({
+      ...item,
+      importId: sessionMeta.importId,
+      lastUpdated: sessionMeta.importedAt,
+    }));
 
-  const handleRemoveDisciplinesBySource = (sourceIdentifier: string) => {
-    setDisciplines((prev) =>
-      prev.filter((d) => !d.sourceFileOrUrl.toLowerCase().includes(sourceIdentifier.toLowerCase()))
-    );
-  };
+    // 2. Atomically replace disciplines state (NEVER merge, concat or append)
+    setDisciplines(taggedItems);
+    setActiveSession(sessionMeta);
 
-  const handleClearAllData = (clearSourcesAlso: boolean = false) => {
-    setDisciplines([]);
+    // 3. Reset any temporary derived filters
+    setAuditCourseFilter(null);
+    setAuditRiskOnly(false);
+
+    // 4. Update the single source of truth in local storage
     try {
+      localStorage.setItem('pulso_disciplines_v6', JSON.stringify(taggedItems));
+      localStorage.setItem('pulso_active_session_v6', JSON.stringify(sessionMeta));
+      localStorage.setItem('pulso_user_pdf_docs_v6', JSON.stringify([
+        {
+          fileName: sessionMeta.fileName,
+          description: `Relatório Ativo · ${sessionMeta.campus} (${sessionMeta.studyTimeFormatted} estudo, ${sessionMeta.attendanceRate.toFixed(2).replace('.', ',')}% freq)`,
+          recordCount: sessionMeta.totalRecords,
+          fileSize: sessionMeta.fileSize || '245 KB',
+          uploadedDate: new Date().toISOString().slice(0, 10),
+        }
+      ]));
+      // Clean legacy caches to prevent cross-file contamination
+      localStorage.removeItem('pulso_disciplines_v5');
+      localStorage.removeItem('pulso_disciplines_v4');
       localStorage.removeItem('pulso_disciplines_v3');
       localStorage.removeItem('pulso_disciplines_v2');
-      if (clearSourcesAlso) {
-        setConfig((prev) => ({
-          ...prev,
-          biConnections: [],
-        }));
-        localStorage.removeItem('pulso_user_pdf_docs_v3');
-      }
+      localStorage.removeItem('pulso_user_pdf_docs_v5');
+      localStorage.removeItem('pulso_user_pdf_docs_v4');
     } catch (e) {}
+  };
+
+  // =========================================================================
+  // CENTRAL ROUTINE: Clear All Imported Data Atomically
+  // Wipes all imported data and derived metrics, while preserving config & metadata.
+  // =========================================================================
+  const handleClearAllImportedData = () => {
+    setDisciplines([]);
+    setActiveSession(null);
+    setAuditCourseFilter(null);
+    setAuditRiskOnly(false);
+
+    try {
+      localStorage.removeItem('pulso_disciplines_v6');
+      localStorage.removeItem('pulso_active_session_v6');
+      localStorage.setItem('pulso_user_pdf_docs_v6', JSON.stringify([]));
+      // Remove all legacy keys
+      localStorage.removeItem('pulso_disciplines_v5');
+      localStorage.removeItem('pulso_disciplines_v4');
+      localStorage.removeItem('pulso_disciplines_v3');
+      localStorage.removeItem('pulso_disciplines_v2');
+      localStorage.removeItem('pulso_user_pdf_docs_v5');
+      localStorage.removeItem('pulso_user_pdf_docs_v4');
+    } catch (e) {}
+    // CONFIGURATION (pulso_config_v3) IS PRESERVED INTACT!
   };
 
   const handleUpdateDiscipline = (updated: DisciplineMetric) => {
@@ -141,6 +203,7 @@ export default function App() {
         {activeTab === 'dashboard' && (
           <DashboardView
             disciplines={disciplines}
+            activeSession={activeSession}
             config={config}
             onNavigateToAudit={handleNavigateToAudit}
             onNavigateToSources={() => setActiveTab('sources')}
@@ -150,9 +213,9 @@ export default function App() {
         {activeTab === 'sources' && (
           <IngestionView
             disciplines={disciplines}
-            onAddDisciplines={handleAddDisciplines}
-            onRemoveDisciplinesBySource={handleRemoveDisciplinesBySource}
-            onClearAllData={handleClearAllData}
+            activeSession={activeSession}
+            onReplaceImportData={handleReplaceImportData}
+            onClearAllImportedData={handleClearAllImportedData}
             config={config}
             onUpdateConfig={setConfig}
           />
@@ -163,7 +226,6 @@ export default function App() {
             disciplines={disciplines}
             onUpdateDiscipline={handleUpdateDiscipline}
             onBatchUpdateDisciplines={handleBatchUpdateDisciplines}
-            onClearAllData={handleClearAllData}
             weights={config.weights}
             initialCourseFilter={auditCourseFilter}
             initialRiskOnly={auditRiskOnly}
@@ -184,6 +246,7 @@ export default function App() {
             disciplines={disciplines}
             config={config}
             onUpdateConfig={setConfig}
+            activeSession={activeSession}
           />
         )}
 

@@ -28,3 +28,52 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* ==========================================================================
+   Executive Dashboard Landscape Print Styles (image_376e7fab.png faithful)
+   ========================================================================== */
+@media print {
+  @page {
+    size: landscape;
+    margin: 4mm;
+  }
+
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide everything on the page except the executive report container */
+  header,
+  nav,
+  footer,
+  aside,
+  .no-print,
+  [data-no-print="true"],
+  button {
+    display: none !important;
+  }
+
+  /* Make sure the executive report is full width and cleanly displayed */
+  #print-executive-report {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Prevent awkward page breaks inside cards or table rows */
+  .break-inside-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}
+

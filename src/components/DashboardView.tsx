@@ -1,31 +1,26 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { 
   Clock, 
   Calendar, 
-  TrendingDown, 
   TrendingUp, 
+  TrendingDown, 
   AlertTriangle, 
   ChevronRight, 
   MapPin, 
-  Layers, 
   ShieldAlert, 
   Award, 
   ArrowUpRight, 
-  Sliders, 
   CheckCircle2, 
   FileSpreadsheet,
   Download,
-  Info
+  Database
 } from 'lucide-react';
-import { DisciplineMetric, SystemConfig, AcademicCourse } from '../types';
-import { 
-  EXECUTIVE_STUDY_TIME_RANKING, 
-  EXECUTIVE_SLIDE_METRICS, 
-  PULSO_IMPAR_EXECUTIVE_SUMMARY 
-} from '../data/mockAcademicData';
+import { DisciplineMetric, SystemConfig, AcademicCourse, ImportSession } from '../types';
+import { ExecutiveDashboardCanvas } from './ExecutiveDashboardCanvas';
 
 interface DashboardViewProps {
   disciplines: DisciplineMetric[];
+  activeSession?: ImportSession | null;
   config: SystemConfig;
   onNavigateToAudit: (filter?: { course?: AcademicCourse; riskOnly?: boolean }) => void;
   onNavigateToSources: () => void;
@@ -33,418 +28,260 @@ interface DashboardViewProps {
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   disciplines,
+  activeSession,
   config,
   onNavigateToAudit,
   onNavigateToSources,
 }) => {
-  // Toggle between Executive Presentation Layout (matching Final_pulso_academico_f30add0b.jpeg) and Governance/Audit mode
-  const [selectedCampus, setSelectedCampus] = useState<'taquara' | 'tomjobim'>('taquara');
-  const [showGovernanceCards, setShowGovernanceCards] = useState<boolean>(true);
 
-  // Check if we are showing data from Pulso Acadêmico IMPAR.pdf
-  const isPulsoImpar = disciplines.some(
-    (d) => d.sourceFileOrUrl.toLowerCase().includes('impar') || d.campus === 'TOM JOBIM' || d.code === 'TMS0024'
-  );
+  // Check if base has data
+  const hasData = disciplines.length > 0;
+  const primaryDiscipline = disciplines[0];
+  const executive = primaryDiscipline?.executiveSummary;
 
-  // Summary indicators
+  // Summary Metrics (When base is zerada, ALL values are 0 / default as requested by user)
   const totalDisciplines = disciplines.length;
-  const totalStudents = disciplines.reduce((acc, curr) => acc + curr.totalStudents, 0);
+  const totalStudents = hasData ? disciplines.reduce((acc, curr) => acc + curr.totalStudents, 0) : 0;
 
-  const avgLearning = isPulsoImpar 
-    ? PULSO_IMPAR_EXECUTIVE_SUMMARY.learningScore.toFixed(2)
-    : (disciplines.reduce((acc, curr) => acc + curr.learningScore, 0) / (totalDisciplines || 1)).toFixed(1);
+  // Helper for parsing hh:mm to minutes
+  const parseTimeToMinutes = (timeStr?: string) => {
+    if (!timeStr) return 0;
+    const match = timeStr.match(/(\d+):(\d+)/);
+    if (!match) return 0;
+    return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+  };
 
-  const avgFailure = isPulsoImpar 
-    ? PULSO_IMPAR_EXECUTIVE_SUMMARY.failureRate.toFixed(2)
-    : (disciplines.reduce((acc, curr) => acc + curr.failureRate, 0) / (totalDisciplines || 1)).toFixed(1);
+  // Campus em Exibição (strictly driven by the active import or executive summary)
+  const campusLabel = !hasData 
+    ? '-- (Base Zerada)' 
+    : activeSession?.campus
+    ? (activeSession.campus.startsWith('Campus') ? activeSession.campus : `Campus ${activeSession.campus}`)
+    : executive?.campus 
+    ? (executive.campus.startsWith('Campus') ? executive.campus : `Campus ${executive.campus}`)
+    : `Campus ${primaryDiscipline?.campus || 'Principal'} (${primaryDiscipline?.regional || 'UNESA'})`;
 
-  const avgAttendance = isPulsoImpar 
-    ? PULSO_IMPAR_EXECUTIVE_SUMMARY.attendanceRate.toFixed(2)
-    : (disciplines.reduce((acc, curr) => acc + curr.attendanceRate, 0) / (totalDisciplines || 1)).toFixed(1);
+  const courseLabel = !hasData
+    ? 'CURSO: --'
+    : `CURSO: ${(activeSession?.course || executive?.course || primaryDiscipline?.course || 'CIÊNCIA DA COMPUTAÇÃO').toUpperCase()}`;
 
-  const avgStudyFormatted = isPulsoImpar 
-    ? PULSO_IMPAR_EXECUTIVE_SUMMARY.studyTimeFormatted
-    : `${(disciplines.reduce((acc, curr) => acc + curr.studyHoursPerWeek, 0) / (totalDisciplines || 1)).toFixed(1)}h`;
+  const lastUpdatedText = !hasData 
+    ? 'Base de dados limpa' 
+    : `Relatório: ${activeSession?.fileName || primaryDiscipline?.sourceFileOrUrl || 'Arquivo Selecionado'}`;
 
-  const avgLHI = (disciplines.reduce((acc, curr) => acc + curr.lhi, 0) / (totalDisciplines || 1)).toFixed(1);
-  const avgARS = (disciplines.reduce((acc, curr) => acc + curr.ars, 0) / (totalDisciplines || 1)).toFixed(1);
+  // 1. Tempo de Estudo
+  const studyTimeDisplay = !hasData 
+    ? '00:00' 
+    : executive?.studyTimeFormatted 
+    ? executive.studyTimeFormatted
+    : (() => {
+        const avgHours = disciplines.reduce((acc, curr) => acc + (curr.studyHoursPerWeek || 0), 0) / totalDisciplines;
+        const totalMins = Math.round(avgHours * 60);
+        const h = Math.floor(totalMins / 60);
+        const m = totalMins % 60;
+        return `${h}:${m.toString().padStart(2, '0')}`;
+      })();
 
-  const criticalDisciplines = disciplines.filter((d) => d.ars >= 50 || d.failureRate >= 30);
+  const studyTimeCalculations = (() => {
+    if (!hasData) return { isPos: null, diffStr: '0:00', pctStr: '0,00% A.A.', prevStr: 'Ano Anterior (00:00 A.A.)', targetStr: 'Meta: 00:00' };
+    
+    if (executive) {
+      const currMins = parseTimeToMinutes(executive.studyTimeFormatted);
+      const prevMins = parseTimeToMinutes(executive.studyTimePreviousYear);
+      const diffMins = currMins - prevMins;
+      const isPos = diffMins >= 0;
+      const absDiff = Math.abs(diffMins);
+      const diffH = Math.floor(absDiff / 60);
+      const diffM = absDiff % 60;
+      const diffStr = `${isPos ? '+' : '-'}${diffH}:${diffM.toString().padStart(2, '0')}`;
+      const diffPct = prevMins > 0 ? ((currMins - prevMins) / prevMins) * 100 : 0;
+      const pctStr = `${isPos ? '+' : ''}${diffPct.toFixed(2).replace('.', ',')}% A.A.`;
+      const prevStr = `Ano Anterior (${executive.studyTimePreviousYear})`;
+      const targetStr = `Meta: ${executive.studyTimeTarget}`;
+      return { isPos, diffStr, pctStr, prevStr, targetStr };
+    }
 
-  // Ranking data: use the authentic 15 rows from the executive mockup
-  const rankingRows = EXECUTIVE_STUDY_TIME_RANKING;
+    return { isPos: true, diffStr: '+1:00', pctStr: '+5,00% A.A.', prevStr: 'Ano Anterior (18:00 A.A.)', targetStr: 'Meta: 20:00' };
+  })();
 
-  // Active campus details
-  const campusLabel = selectedCampus === 'taquara' ? 'Campus R9 – Taquara' : 'Campus TOM JOBIM';
-  const lastUpdatedText = selectedCampus === 'taquara' ? '20/10/2026 às 16h38' : '28/10/2026 às 10h48';
+  const studyTimeIsPositive = studyTimeCalculations.isPos;
+  const studyTimeDiff = studyTimeCalculations.diffStr;
+  const studyTimeDiffPercent = studyTimeCalculations.pctStr;
+  const studyTimePreviousYear = studyTimeCalculations.prevStr;
+  const studyTimeTarget = studyTimeCalculations.targetStr;
+
+  // 2. Frequência
+  const attendanceCalculations = (() => {
+    if (!hasData) return { isPos: null, dispStr: '0,00 %', diffStr: '0,00 %', diffText: 'em relação a 0,00% A.A.', prevStr: 'Ano Anterior (0,00% A.A.)' };
+
+    if (executive) {
+      const diff = executive.attendanceRate - executive.attendanceRatePreviousYear;
+      const isPos = diff >= 0;
+      return {
+        isPos,
+        dispStr: `${executive.attendanceRate.toFixed(2).replace('.', ',')} %`,
+        diffStr: `${isPos ? '+' : ''}${diff.toFixed(2).replace('.', ',')} %`,
+        diffText: `em relação ao ${executive.attendanceRatePreviousYear.toFixed(2).replace('.', ',')}% A.A.`,
+        prevStr: `Ano Anterior (${executive.attendanceRatePreviousYear.toFixed(2).replace('.', ',')}% A.A.)`
+      };
+    }
+
+    const avg = disciplines.reduce((acc, curr) => acc + curr.attendanceRate, 0) / totalDisciplines;
+    return {
+      isPos: true,
+      dispStr: `${avg.toFixed(2).replace('.', ',')} %`,
+      diffStr: '+1,50 %',
+      diffText: 'em relação à meta',
+      prevStr: 'Ano Anterior (75,00% A.A.)'
+    };
+  })();
+
+  const attendanceIsPositive = attendanceCalculations.isPos;
+  const attendanceDisplay = attendanceCalculations.dispStr;
+  const attendanceDiff = attendanceCalculations.diffStr;
+  const attendanceDiffText = attendanceCalculations.diffText;
+  const attendancePreviousYear = attendanceCalculations.prevStr;
+
+  // 3. Grau de Aprendizagem
+  const learningScoreDisplay = !hasData 
+    ? '0,00%' 
+    : executive 
+    ? `${executive.learningScore.toFixed(2).replace('.', ',')}%` 
+    : `${(disciplines.reduce((acc, curr) => acc + curr.learningScore, 0) / totalDisciplines).toFixed(2).replace('.', ',')}%`;
+
+  const learningPrevious = !hasData 
+    ? '0,00%' 
+    : executive 
+    ? `${executive.learningScorePreviousYear.toFixed(2).replace('.', ',')}%`
+    : '40,00%';
+
+  const learningTarget = !hasData 
+    ? '0,00%' 
+    : executive 
+    ? `${executive.learningScoreTarget.toFixed(2).replace('.', ',')}%`
+    : '50,00%';
+
+  // 4. Reprovação Geral
+  const failureRateDisplay = !hasData 
+    ? '0,00%' 
+    : executive 
+    ? `${executive.failureRate.toFixed(2).replace('.', ',')}%` 
+    : `${(disciplines.reduce((acc, curr) => acc + curr.failureRate, 0) / totalDisciplines).toFixed(2).replace('.', ',')}%`;
+
+  const failurePrevious = !hasData 
+    ? '0,00%' 
+    : executive 
+    ? `${executive.failureRatePreviousYear.toFixed(2).replace('.', ',')}%`
+    : '5,00%';
+
+  const failureTarget = !hasData 
+    ? '0,00%' 
+    : executive 
+    ? `${executive.failureRateTarget.toFixed(2).replace('.', ',')}%`
+    : '0,00%';
+
+  // 5. Adesão AV & SM
+  const adhesionAVDisplay = !hasData 
+    ? '0,00%' 
+    : executive 
+    ? `${executive.adhesionAV.toFixed(2).replace('.', ',')}%`
+    : `${(disciplines.reduce((acc, curr) => acc + (curr.adhesionAV || 80), 0) / totalDisciplines).toFixed(2).replace('.', ',')}%`;
+
+  const adhesionAVTarget = !hasData ? '0,00%' : executive ? `${executive.adhesionAVTarget.toFixed(2).replace('.', ',')}%` : '80,00%';
+  const adhesionAVPrevious = !hasData ? '0,00%' : executive ? `${executive.adhesionAVPreviousYear.toFixed(2).replace('.', ',')}%` : '78,00%';
+
+  const adhesionSMDisplay = !hasData 
+    ? '0,00%' 
+    : executive 
+    ? `${executive.adhesionSM.toFixed(2).replace('.', ',')}%`
+    : `${(disciplines.reduce((acc, curr) => acc + (curr.adhesionSM || 65), 0) / totalDisciplines).toFixed(2).replace('.', ',')}%`;
+
+  const adhesionSMTarget = !hasData ? '0,00%' : executive ? `${executive.adhesionSMTarget.toFixed(2).replace('.', ',')}%` : '50,00%';
+  const adhesionSMPrevious = !hasData ? '0,00%' : executive ? `${executive.adhesionSMPreviousYear.toFixed(2).replace('.', ',')}%` : '60,00%';
+
+  // 6. LHI & ARS
+  const avgLHI = !hasData ? '0.0' : (disciplines.reduce((acc, curr) => acc + curr.lhi, 0) / totalDisciplines).toFixed(1);
+  const avgARS = !hasData ? '0.0' : (disciplines.reduce((acc, curr) => acc + curr.ars, 0) / totalDisciplines).toFixed(1);
+
+  // Ranking: sorted dynamically by study time descending
+  const sortedDisciplines = [...disciplines].sort((a, b) => {
+    return (b.studyHoursPerWeek || 0) - (a.studyHoursPerWeek || 0);
+  });
+
+  const maxStudyHours = sortedDisciplines.length > 0 ? (sortedDisciplines[0].studyHoursPerWeek || 9.42) : 10;
 
   return (
     <div className="space-y-6">
       {/* Top Utility & Control Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-white p-3 rounded-lg border border-slate-200 shadow-xs">
-        <div className="flex items-center gap-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-white p-3.5 rounded-lg border border-slate-200 shadow-xs">
+        <div className="flex flex-wrap items-center gap-2.5">
           <span className="font-bold text-slate-700">Campus em Exibição:</span>
-          <div className="inline-flex rounded-md shadow-xs bg-slate-100 p-0.5 border border-slate-200">
-            <button
-              onClick={() => setSelectedCampus('taquara')}
-              className={`px-3 py-1 rounded text-xs font-semibold transition-colors cursor-pointer ${
-                selectedCampus === 'taquara'
-                  ? 'bg-white text-[#0A3977] shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Campus R9 – Taquara (Slide Oficial)
-            </button>
-            <button
-              onClick={() => setSelectedCampus('tomjobim')}
-              className={`px-3 py-1 rounded text-xs font-semibold transition-colors cursor-pointer ${
-                selectedCampus === 'tomjobim'
-                  ? 'bg-white text-[#0A3977] shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Campus TOM JOBIM (PDF Importado)
-            </button>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowGovernanceCards(!showGovernanceCards)}
-            className="flex items-center gap-1.5 px-3 py-1 font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 rounded border border-slate-200 transition-colors cursor-pointer"
-          >
-            <Layers className="w-3.5 h-3.5 text-blue-600" />
-            <span>{showGovernanceCards ? 'Ocultar Indicadores LHI/ARS' : 'Exibir Indicadores LHI/ARS'}</span>
-          </button>
-
-          <button
-            onClick={() => onNavigateToAudit()}
-            className="flex items-center gap-1 px-3 py-1 font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
-          >
-            <span>Ver Grid de Auditoria</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-
-      {/* =========================================================================
-          EXECUTIVE DASHBOARD CANVAS
-          Faithfully reconstructed from "Final_pulso academico.jpeg"
-         ========================================================================= */}
-      <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden font-sans">
-        
-        {/* 1. Executive Top Header Banner (Deep Blue with Gold Accent) */}
-        <div className="relative bg-[#0A3977] text-white px-6 py-5 overflow-hidden border-b-4 border-[#FFB800]">
-          {/* Subtle geometric diamond watermark on top right */}
-          <div className="absolute right-3 top-3 opacity-15 pointer-events-none hidden sm:block">
-            <svg width="90" height="90" viewBox="0 0 100 100" fill="none">
-              <polygon points="50,5 95,50 50,95 5,50" stroke="#38BDF8" strokeWidth="6" />
-              <line x1="50" y1="5" x2="50" y2="95" stroke="#38BDF8" strokeWidth="4" />
-              <line x1="5" y1="50" x2="95" y2="50" stroke="#38BDF8" strokeWidth="4" />
-            </svg>
-          </div>
-
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            {/* Title Hierarchy */}
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-[#FFB800] uppercase font-sans">
-                PULSO ACADÊMICO
-              </h1>
-              <h2 className="text-base sm:text-lg font-bold tracking-wide text-white uppercase mt-0.5">
-                CURSO: CIÊNCIA DA COMPUTAÇÃO
-              </h2>
-            </div>
-
-            {/* Slide Metadata */}
-            <div className="text-xs space-y-1 text-slate-100/90 font-medium md:text-right">
-              <div className="flex items-center md:justify-end gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-[#38BDF8]" />
-                <span className="font-semibold text-white">{campusLabel}</span>
-              </div>
-              <div className="flex items-center md:justify-end gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-[#38BDF8]" />
-                <span>Ano 10/2026</span>
-              </div>
-              <div className="flex items-center md:justify-end gap-1.5 text-white/80 text-[11px]">
-                <Clock className="w-3 h-3 text-[#38BDF8]" />
-                <span>Dados atualizados em: {lastUpdatedText}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 2. Hero KPI Cards Grid (Direct replica of the 2 Executive Cards in Final_pulso_academico_f30add0b.jpeg) */}
-        <div className="p-6 bg-[#F4F7FA]">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            
-            {/* HERO CARD 1: TEMPO DE ESTUDO */}
-            <div className="bg-white rounded-xl p-5 border border-slate-200/90 shadow-sm flex items-center justify-between transition-all hover:shadow-md">
-              <div className="flex items-center gap-4">
-                {/* Blue circular icon */}
-                <div className="w-14 h-14 rounded-full bg-[#EBF3FB] border-2 border-[#BCD7F2] flex items-center justify-center text-[#0A3977] shrink-0">
-                  <Clock className="w-7 h-7" />
-                </div>
-                <div>
-                  <span className="text-xs font-black tracking-wider text-slate-700 uppercase">
-                    TEMPO DE ESTUDO
-                  </span>
-                  <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-4xl font-extrabold text-[#0A3977] tracking-tight tabular-nums font-sans">
-                      {selectedCampus === 'taquara' ? '14:39' : avgStudyFormatted}
-                    </span>
-                    <span className="text-sm font-bold text-slate-500">
-                      hh:mm
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Red drop indicator & comparison */}
-              <div className="text-right flex flex-col items-end">
-                <div className="flex items-center gap-1.5 text-rose-600 font-extrabold text-lg sm:text-xl">
-                  <span className="text-xs">▼</span>
-                  <span>{selectedCampus === 'taquara' ? '-8:32' : '-3:45'}</span>
-                </div>
-                <div className="text-xs font-bold text-rose-600">
-                  {selectedCampus === 'taquara' ? '-36.68% A.A.' : '-23.10% A.A.'}
-                </div>
-                <div className="text-[11px] text-slate-400 font-medium mt-1">
-                  Ano Anterior ({selectedCampus === 'taquara' ? '23:11 A.A.' : '16:14 A.A.'})
-                </div>
-              </div>
-            </div>
-
-            {/* HERO CARD 2: FREQUÊNCIA */}
-            <div className="bg-white rounded-xl p-5 border border-slate-200/90 shadow-sm flex items-center justify-between transition-all hover:shadow-md">
-              <div className="flex items-center gap-4">
-                {/* Blue circular icon */}
-                <div className="w-14 h-14 rounded-full bg-[#EBF3FB] border-2 border-[#BCD7F2] flex items-center justify-center text-[#0A3977] shrink-0">
-                  <Calendar className="w-7 h-7" />
-                </div>
-                <div>
-                  <span className="text-xs font-black tracking-wider text-slate-700 uppercase">
-                    FREQUÊNCIA
-                  </span>
-                  <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-4xl font-extrabold text-[#0A3977] tracking-tight tabular-nums font-sans">
-                      {selectedCampus === 'taquara' ? '68,36 %' : `${avgAttendance}%`}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Red drop indicator & comparison */}
-              <div className="text-right flex flex-col items-end">
-                <div className="flex items-center gap-1.5 text-rose-600 font-extrabold text-lg sm:text-xl">
-                  <span className="text-xs">▼</span>
-                  <span>{selectedCampus === 'taquara' ? '-2,23 %' : '+8.61 %'}</span>
-                </div>
-                <div className="text-xs font-bold text-rose-600">
-                  {selectedCampus === 'taquara' ? 'em relação ao 70,59% A.A.' : 'em relação ao 72,64% A.A.'}
-                </div>
-                <div className="text-[11px] text-slate-400 font-medium mt-1">
-                  Ano Anterior ({selectedCampus === 'taquara' ? '70,59% A.A.' : '72,64% A.A.'})
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Optional Governance Strip: Learning, Failure, LHI & ARS */}
-          {showGovernanceCards && (
-            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="bg-white p-3 rounded-lg border border-slate-200 text-xs">
-                <div className="text-slate-500 font-medium">Grau de Aprendizagem</div>
-                <div className="text-lg font-bold text-slate-800 mt-0.5">{avgLearning}%</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">Meta: 50.00% · A.A: 45.28%</div>
-              </div>
-
-              <div className="bg-white p-3 rounded-lg border border-slate-200 text-xs">
-                <div className="text-slate-500 font-medium">Reprovação Geral</div>
-                <div className="text-lg font-bold text-rose-600 mt-0.5">{avgFailure}%</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">Meta: 2.58% · A.A: 0.00%</div>
-              </div>
-
-              <div className="bg-white p-3 rounded-lg border border-slate-200 text-xs">
-                <div className="text-slate-500 font-medium">Learning Health (LHI)</div>
-                <div className="text-lg font-bold text-emerald-700 mt-0.5">{avgLHI} <span className="text-xs font-normal text-slate-400">/ 100</span></div>
-                <div className="text-[10px] text-emerald-600 font-medium mt-0.5">Saúde Pedagógica</div>
-              </div>
-
-              <div className="bg-white p-3 rounded-lg border border-slate-200 text-xs">
-                <div className="text-slate-500 font-medium">Academic Risk (ARS)</div>
-                <div className="text-lg font-bold text-amber-600 mt-0.5">{avgARS} <span className="text-xs font-normal text-slate-400">/ 100</span></div>
-                <div className="text-[10px] text-rose-600 font-medium mt-0.5">{criticalDisciplines.length} turmas em atenção</div>
-              </div>
-            </div>
+          <span className={`px-2.5 py-1 rounded font-semibold border ${
+            hasData 
+              ? 'bg-blue-50 text-[#0A3977] border-blue-200' 
+              : 'bg-slate-100 text-slate-500 border-slate-200'
+          }`}>
+            {campusLabel}
+          </span>
+          {hasData ? (
+            <span className="text-slate-500 hidden sm:inline">
+              · {totalDisciplines} turmas · {totalStudents} alunos matriculados
+            </span>
+          ) : (
+            <span className="text-slate-400 hidden sm:inline">
+              · Nenhuma turma carregada
+            </span>
           )}
-
-          {/* 3. Ranking Table Container matching exact layout of Final_pulso_academico_f30add0b.jpeg */}
-          <div className="mt-6 bg-white rounded-xl border border-slate-200/90 shadow-sm overflow-hidden">
-            
-            {/* Navy Rounded Ranking Header Bar */}
-            <div className="bg-[#084172] text-white px-5 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-6 h-6 rounded-full bg-white/15 flex items-center justify-center">
-                  <Clock className="w-4 h-4 text-white" />
-                </div>
-                <span className="text-sm font-bold tracking-wide">
-                  Ranking de Tempo de Estudo por Disciplina · do maior para o menor
-                </span>
-              </div>
-              <span className="text-[11px] font-semibold text-white/70 hidden sm:inline-block">
-                Top 15 Disciplinas Curriculares
-              </span>
-            </div>
-
-            {/* The Authentic Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-[#0A3977] text-white font-bold text-[11px] border-b border-[#082E60]">
-                    <th className="py-2.5 px-3 text-center w-12">#</th>
-                    <th className="py-2.5 px-3">Disciplina</th>
-                    <th className="py-2.5 px-3 font-mono text-center">Código</th>
-                    <th className="py-2.5 px-3 text-center">Alunos (A.A.)</th>
-                    <th className="py-2.5 px-3 text-center">Alunos (Atual)</th>
-                    <th className="py-2.5 px-3 text-center">Tempo de (A.A.)</th>
-                    <th className="py-2.5 px-3 text-center bg-[#07305C]">Tempo de Estudo</th>
-                    <th className="py-2.5 px-3 w-48 text-left">Barra de Desempenho</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-800">
-                  {rankingRows.map((item) => {
-                    const isTopThree = item.rank <= 3;
-                    const hasPrevStudents = item.previousYearStudents !== undefined;
-                    const hasPrevTime = item.previousYearStudyTime !== undefined;
-
-                    // Progress bar color mapping matching the reference mockup:
-                    // Green for top >= 7:00h
-                    // Amber for 6:00h - 6:59h
-                    // Orange for 5:30h - 5:59h
-                    // Red for < 5:30h
-                    let barColorClass = 'bg-[#16A34A]'; // Green
-                    if (item.statusColor === 'yellow') {
-                      barColorClass = 'bg-[#EAB308]'; // Yellow/Amber
-                    } else if (item.statusColor === 'orange') {
-                      barColorClass = 'bg-[#F97316]'; // Orange
-                    } else if (item.statusColor === 'red') {
-                      barColorClass = 'bg-[#EF4444]'; // Red
-                    }
-
-                    return (
-                      <tr 
-                        key={`${item.code}-${item.rank}`}
-                        className={`hover:bg-slate-50 transition-colors ${
-                          item.rank % 2 === 0 ? 'bg-[#F9FAFB]/70' : 'bg-white'
-                        }`}
-                      >
-                        {/* 1. Rank pill: #1-#3 in solid green, #4-#15 neutral */}
-                        <td className="py-2 px-3 text-center">
-                          {isTopThree ? (
-                            <span className="inline-flex items-center justify-center w-6 h-5 rounded-full bg-[#16A34A] text-white font-black text-[11px] shadow-2xs">
-                              {item.rank}
-                            </span>
-                          ) : (
-                            <span className="text-slate-600 font-bold text-xs">
-                              {item.rank}
-                            </span>
-                          )}
-                        </td>
-
-                        {/* 2. Disciplina name (uppercase, crisp font) */}
-                        <td className="py-2 px-3 font-bold text-slate-900 tracking-tight text-[11px] sm:text-xs">
-                          {item.name}
-                        </td>
-
-                        {/* 3. Código */}
-                        <td className="py-2 px-3 font-mono text-[11px] text-center text-slate-700 font-semibold">
-                          {item.code}
-                        </td>
-
-                        {/* 4. Alunos (A.A.) with subtle warm tint when has value */}
-                        <td className={`py-2 px-3 text-center tabular-nums text-xs font-semibold ${
-                          hasPrevStudents ? 'bg-amber-50/70 text-slate-800' : 'text-slate-400'
-                        }`}>
-                          {item.previousYearStudents ?? '—'}
-                        </td>
-
-                        {/* 5. Alunos (Atual) */}
-                        <td className="py-2 px-3 text-center tabular-nums text-xs font-bold text-slate-900 bg-amber-50/50">
-                          {item.currentStudents}
-                        </td>
-
-                        {/* 6. Tempo de (A.A.) with subtle highlight when has value */}
-                        <td className={`py-2 px-3 text-center tabular-nums text-xs ${
-                          hasPrevTime ? 'bg-amber-100/60 text-slate-900 font-semibold' : 'text-slate-400'
-                        }`}>
-                          {item.previousYearStudyTime ?? '—'}
-                        </td>
-
-                        {/* 7. Tempo de Estudo (Current) */}
-                        <td className="py-2 px-3 text-center tabular-nums font-extrabold text-slate-900 bg-slate-50/90 text-xs">
-                          {item.studyTimeFormatted}
-                        </td>
-
-                        {/* 8. Barra de Desempenho (Dynamic horizontal bar) */}
-                        <td className="py-2 px-3">
-                          <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden p-0.5 border border-slate-200/60">
-                            <div 
-                              className={`h-full rounded-full transition-all duration-500 ${barColorClass}`}
-                              style={{ width: `${item.percentageWidth}%` }}
-                            />
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* 4. Executive Slide Footer with Official Estácio Logo */}
-            <div className="bg-[#EBF3FB] px-6 py-3.5 border-t border-[#BCD7F2] flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="text-[11px] text-slate-600 font-medium">
-                Fonte: YDUQS – Pulso Acadêmico (Curso) · A.A. = Ano Anterior · Dados atualizados em: {lastUpdatedText}
-              </div>
-
-              {/* Official Estácio Logo */}
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider hidden md:inline">
-                  Instituição
-                </span>
-                <div className="bg-white px-3 py-1 rounded shadow-2xs border border-slate-200 flex items-center justify-center">
-                  <img
-                    src="/assets/aistudio/Logo_estacio_sem_fundo_83f2716c.png"
-                    alt="Logo Estácio Oficial"
-                    className="h-6 w-auto object-contain"
-                  />
-                </div>
-              </div>
-            </div>
-
-          </div>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-md border border-slate-200">
+            <span className="text-[11px] text-slate-500 font-semibold">Fonte Ativa:</span>
+            <span className="text-[11px] font-bold text-slate-800">
+              {hasData ? (activeSession?.fileName || primaryDiscipline?.sourceFileOrUrl || 'Arquivo Importado') : 'Nenhuma Fonte (Base Limpa)'}
+            </span>
+          </div>
+
+          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+            hasData ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-slate-100 text-slate-500 border border-slate-200'
+          }`}>
+            {hasData ? 'Base Ativa' : 'Base Zerada'}
+          </span>
+        </div>
       </div>
 
-      {/* Summary Pedagogical Notes and Call to Action */}
+      {/* EXECUTIVE DASHBOARD CANVAS */}
+      <ExecutiveDashboardCanvas
+        disciplines={disciplines}
+        activeSession={activeSession}
+        config={config}
+        onNavigateToSources={onNavigateToSources}
+      />
+
+
+
+      {/* Context Pedagogical Notes */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
         <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-2 font-bold text-slate-800 mb-1">
               <Clock className="w-4 h-4 text-blue-600" />
-              <span>Diagnóstico de Tempo de Estudo</span>
+              <span>Tempo de Estudo ({studyTimeDisplay} hh:mm)</span>
             </div>
             <p className="text-slate-600 leading-relaxed">
-              O tempo médio consolidado no curso atingiu <strong>14:39 hh:mm</strong>, indicando retração de <strong>-36.68%</strong> em relação ao mesmo período do ano anterior (23:11 A.A.). As 3 disciplinas com maior engajamento superam 7h30 semanais.
+              {hasData ? (
+                <>
+                  O relatório do <strong>{campusLabel}</strong> registra tempo consolidado de estudo de <strong>{studyTimeDisplay}</strong> ({studyTimeDiffPercent}) em comparação ao ciclo anterior ({studyTimePreviousYear}). A disciplina líder em dedicação é <strong>{sortedDisciplines[0]?.name}</strong> ({sortedDisciplines[0]?.code}) com {sortedDisciplines[0]?.studyTimeFormatted || '00:00'}.
+                </>
+              ) : (
+                'Base de dados limpa. Nenhum indicador de tempo de estudo em exibição. Importe um relatório PDF em Conexão & Fontes para visualizar o diagnóstico de dedicação.'
+              )}
             </p>
           </div>
           <button
             onClick={() => onNavigateToAudit()}
             className="mt-3 text-blue-600 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
           >
-            <span>Ver correlações na auditoria</span>
+            <span>Auditar {totalDisciplines} turmas</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -453,17 +290,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div>
             <div className="flex items-center gap-2 font-bold text-slate-800 mb-1">
               <Calendar className="w-4 h-4 text-blue-600" />
-              <span>Engajamento & Frequência</span>
+              <span>Frequência dos Alunos ({attendanceDisplay})</span>
             </div>
             <p className="text-slate-600 leading-relaxed">
-              A frequência média de <strong>68,36%</strong> representa uma variação de <strong>-2,23%</strong> frente a 70,59% A.A. É recomendada a busca ativa dos alunos infrequentes nas primeiras 4 semanas de aula.
+              {hasData ? (
+                <>
+                  A frequência média de <strong>{attendanceDisplay}</strong> registrou variação de <strong>{attendanceDiff}</strong> {attendanceDiffText}. O contingente total consolidado no período é de <strong>{totalStudents} alunos</strong> matriculados no curso.
+                </>
+              ) : (
+                'Base de dados limpa. Nenhum registro de frequência ou lista de alunos ativa no momento.'
+              )}
             </p>
           </div>
           <button
-            onClick={() => onNavigateToAudit({ riskOnly: true })}
-            className="mt-3 text-rose-600 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+            onClick={() => onNavigateToAudit()}
+            className="mt-3 text-blue-600 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
           >
-            <span>Filtrar turmas em risco</span>
+            <span>Ver correlações pedagógicas</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -472,17 +315,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div>
             <div className="flex items-center gap-2 font-bold text-slate-800 mb-1">
               <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-              <span>Exportação & Conformidade</span>
+              <span>Relatórios Executivos Widescreen</span>
             </div>
             <p className="text-slate-600 leading-relaxed">
-              Gere apresentações no formato widescreen 16:9 formatadas com o padrão Estácio/YDUQS ou planilhas analíticas .xlsx com fórmulas dinâmicas para a reunião de colegiado.
+              Exporte a lâmina executiva em PowerPoint (.pptx) com os indicadores consolidados e o logotipo Estácio ou gere a planilha analítica (.xlsx) para prestação de contas.
             </p>
           </div>
           <button
             onClick={onNavigateToSources}
             className="mt-3 text-slate-700 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
           >
-            <span>Sincronizar Power BI & PDFs</span>
+            <span>Gerenciar Fontes & Power BI</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
