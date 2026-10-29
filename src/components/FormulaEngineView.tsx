@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { FormulaWeights, DisciplineMetric, SystemConfig } from '../types';
 import { DEFAULT_WEIGHTS, recalculateAllMetrics } from '../utils/calculations';
+import { PulsoConceptualMatrixTable } from './PulsoConceptualMatrixTable';
 
 interface FormulaEngineViewProps {
   weights: FormulaWeights;
@@ -426,11 +427,16 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
       </div>
 
       {savedSuccess && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md text-xs font-semibold flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           <span>Fórmulas atualizadas com sucesso! Toda a base acadêmica foi recalculada.</span>
         </div>
       )}
+
+      {/* Official Pulso 1.0 vs Pulso 2.0 Conceptual Matrix & Interactive Formula Simulator */}
+      <div className="pt-2">
+        <PulsoConceptualMatrixTable showSimulator={true} />
+      </div>
     </div>
   );
 };

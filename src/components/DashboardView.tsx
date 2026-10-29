@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { DisciplineMetric, SystemConfig, AcademicCourse, ImportSession } from '../types';
 import { ExecutiveDashboardCanvas } from './ExecutiveDashboardCanvas';
+import { PulsoConceptualMatrixTable } from './PulsoConceptualMatrixTable';
 
 interface DashboardViewProps {
   disciplines: DisciplineMetric[];
@@ -212,7 +213,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Utility & Control Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 text-xs bg-white p-3.5 rounded-lg border border-slate-200 shadow-xs">
+      <div className="no-print flex flex-wrap items-center justify-between gap-3 text-xs bg-white p-3.5 rounded-lg border border-slate-200 shadow-xs">
         <div className="flex flex-wrap items-center gap-2.5">
           <span className="font-bold text-slate-700">Campus em Exibição:</span>
           <span className={`px-2.5 py-1 rounded font-semibold border ${
@@ -250,17 +251,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* EXECUTIVE DASHBOARD CANVAS */}
-      <ExecutiveDashboardCanvas
-        disciplines={disciplines}
-        activeSession={activeSession}
-        config={config}
-        onNavigateToSources={onNavigateToSources}
-      />
-
-
+      <div id="print-executive-report">
+        <ExecutiveDashboardCanvas
+          disciplines={disciplines}
+          activeSession={activeSession}
+          config={config}
+          onNavigateToSources={onNavigateToSources}
+        />
+      </div>
 
       {/* Context Pedagogical Notes */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+      <div className="no-print grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
         <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-2 font-bold text-slate-800 mb-1">
@@ -270,10 +271,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <p className="text-slate-600 leading-relaxed">
               {hasData ? (
                 <>
-                  O relatório do <strong>{campusLabel}</strong> registra tempo consolidado de estudo de <strong>{studyTimeDisplay}</strong> ({studyTimeDiffPercent}) em comparação ao ciclo anterior ({studyTimePreviousYear}). A disciplina líder em dedicação é <strong>{sortedDisciplines[0]?.name}</strong> ({sortedDisciplines[0]?.code}) com {sortedDisciplines[0]?.studyTimeFormatted || '00:00'}.
+                  O relatório do <strong>{campusLabel}</strong> registra tempo consolidado de <strong>{studyTimeDisplay}</strong> ({studyTimeDiffPercent} vs. {studyTimePreviousYear}), apurado pelo <em>tempo de navegação no conteúdo da disciplina + 52&apos; para cada download realizado</em>. Líder: <strong>{sortedDisciplines[0]?.name}</strong> ({sortedDisciplines[0]?.code}) com {sortedDisciplines[0]?.studyTimeFormatted || '00:00'}.
                 </>
               ) : (
-                'Base de dados limpa. Nenhum indicador de tempo de estudo em exibição. Importe um relatório PDF em Conexão & Fontes para visualizar o diagnóstico de dedicação.'
+                "Base de dados limpa. O indicador apura o tempo de navegação no conteúdo da disciplina + 52' para cada download realizado (Pulso 1.0 / 2.0)."
               )}
             </p>
           </div>
@@ -290,15 +291,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div>
             <div className="flex items-center gap-2 font-bold text-slate-800 mb-1">
               <Calendar className="w-4 h-4 text-blue-600" />
-              <span>Frequência dos Alunos ({attendanceDisplay})</span>
+              <span>Frequência ({attendanceDisplay}) & Adesão</span>
             </div>
             <p className="text-slate-600 leading-relaxed">
               {hasData ? (
                 <>
-                  A frequência média de <strong>{attendanceDisplay}</strong> registrou variação de <strong>{attendanceDiff}</strong> {attendanceDiffText}. O contingente total consolidado no período é de <strong>{totalStudents} alunos</strong> matriculados no curso.
+                  Frequência média de <strong>{attendanceDisplay}</strong> (<em>Quantidade de presenças / Quantidade de presença + faltas</em>), variação de <strong>{attendanceDiff}</strong> {attendanceDiffText}. A partir de 2024.1, todas as modalidades seguem com <strong>SM1 e SM2</strong> na Adesão SM.
                 </>
               ) : (
-                'Base de dados limpa. Nenhum registro de frequência ou lista de alunos ativa no momento.'
+                'Base de dados limpa. Frequência calculada por: Quantidade de presenças / Quantidade de presença + faltas (Pulso 1.0 / 2.0).'
               )}
             </p>
           </div>
@@ -315,10 +316,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div>
             <div className="flex items-center gap-2 font-bold text-slate-800 mb-1">
               <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-              <span>Relatórios Executivos Widescreen</span>
+              <span>Governança Pulso 2.0 & Reprovação</span>
             </div>
             <p className="text-slate-600 leading-relaxed">
-              Exporte a lâmina executiva em PowerPoint (.pptx) com os indicadores consolidados e o logotipo Estácio ou gere a planilha analítica (.xlsx) para prestação de contas.
+              No <strong>Pulso 2.0</strong>, a Reprovação considera os alunos com nota &lt; 6 na expressão <em>maior nota entre (AV, NC e AVS) + (SM1 + SM2)</em> dividido pelos alunos que realizaram ao menos uma das três avaliações, refletindo também a nova modelagem estrutural de dados.
             </p>
           </div>
           <button
@@ -329,6 +330,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
+      </div>
+
+      {/* Official Pulso 1.0 vs. Pulso 2.0 Conceptual Matrix Table (Hidden during print) */}
+      <div className="no-print">
+        <PulsoConceptualMatrixTable showSimulator={false} />
       </div>
     </div>
   );

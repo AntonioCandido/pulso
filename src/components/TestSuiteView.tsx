@@ -10,7 +10,16 @@ import {
   CheckCheck
 } from 'lucide-react';
 import { TestSuiteResult, FormulaWeights } from '../types';
-import { calculateLHI, calculateARS, getLHIStatus, getARSLevel } from '../utils/calculations';
+import { 
+  calculateLHI, 
+  calculateARS, 
+  getLHIStatus, 
+  getARSLevel,
+  calculatePulsoFailureRate,
+  calculatePulsoStudyTime,
+  calculatePulsoAttendanceRate,
+  evaluateStudentFinalExpression
+} from '../utils/calculations';
 
 interface TestSuiteViewProps {
   weights: FormulaWeights;
@@ -103,6 +112,27 @@ export const TestSuiteView: React.FC<TestSuiteViewProps> = ({ weights }) => {
         fn: () => {
           const lhiOverflow = calculateLHI(150, 100, 0, 100, weights.lhi);
           return lhiOverflow <= 100;
+        },
+      },
+      {
+        name: 'test_pulso_v2_reprovacao_denominator',
+        module: 'tests/test_pulso_v2_concepts.py',
+        assertion: 'Valida mudança conceitual de Reprovação no Pulso 2.0: notas <6 na expressão maior(AV,NC,AVS)+(SM1+SM2) dividido por alunos que realizaram ao menos uma avaliação.',
+        fn: () => {
+          const evalCheck = evaluateStudentFinalExpression(4.0, 0, 4.5, 0.5, 0.5);
+          const v1 = calculatePulsoFailureRate(10, 100, 80, '1.0');
+          const v2 = calculatePulsoFailureRate(10, 100, 80, '2.0');
+          return evalCheck.isReproved && v1 === 10 && v2 === 12.5;
+        },
+      },
+      {
+        name: 'test_pulso_study_time_52min_per_download',
+        module: 'tests/test_pulso_v2_concepts.py',
+        assertion: "Valida Tempo de Estudo (Pulso 1.0/2.0): Tempo de navegação no conteúdo + 52' para cada download realizado.",
+        fn: () => {
+          const study = calculatePulsoStudyTime(60, 2); // 60 + 104 = 164 min = 2:44
+          const freq = calculatePulsoAttendanceRate(80, 20); // 80 / (80 + 20) = 80%
+          return study.totalMinutes === 164 && study.formatted === '2:44' && freq === 80;
         },
       },
     ];

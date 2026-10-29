@@ -23,6 +23,186 @@ export const DEFAULT_WEIGHTS: FormulaWeights = {
   },
 };
 
+export interface PulsoIndicatorConcept {
+  id: string;
+  indicator: string;
+  pulso1: string[];
+  pulso2: string;
+  hasChangedInV2: boolean;
+}
+
+export const PULSO_STRUCTURAL_NOTE =
+  'Além das mudanças conceituais nos indicadores, a atualização do Pulso 2.0 trouxe consigo mudanças estruturais (fonte e modelagem de dados) que resultaram em oscilações nos resultados.';
+
+export const PULSO_CONCEPTUAL_MATRIX: PulsoIndicatorConcept[] = [
+  {
+    id: 'grau_aprendizagem',
+    indicator: 'Grau de Aprendizagem',
+    pulso1: [
+      'Total de provas com notas >= as notas esperada/Total de provas realizadas.',
+      '-Nota esperada:média da taxa de acerto das questões que compõem cada prova;',
+      '-O Grau de Aprendizagem de 2023.1 é calculado com base na utilização das questões no mesmo período. Em 2024.1, é considerado as questões respondidas entre 2023.1 e 2024.1.',
+    ],
+    pulso2: 'Igual ao conceito anterior',
+    hasChangedInV2: false,
+  },
+  {
+    id: 'reprovacao',
+    indicator: 'Reprovação',
+    pulso1: [
+      'Quantidade de alunos disciplinas com notas <6 na expressão:maior nota entre (AV, NC e AVS) + (SM1+ SM2) dividido pela quantidade alunos disciplinas',
+    ],
+    pulso2:
+      'Quantidade de alunos disciplinas com notas <6 na expressão:maior nota entre (AV, NC e AVS) + (SM1+ SM2) dividido pela quantidade alunos disciplinas que realizaram ao menos uma das três avaliações.',
+    hasChangedInV2: true,
+  },
+  {
+    id: 'tempo_estudo',
+    indicator: 'Tempo de Estudo',
+    pulso1: [
+      "Tempo de navegação no conteúdo da disciplina + 52' para cada download realizado.",
+    ],
+    pulso2: 'Igual ao conceito anterior',
+    hasChangedInV2: false,
+  },
+  {
+    id: 'adesao_av',
+    indicator: 'Adesão AV',
+    pulso1: [
+      'Quantidade alunos disciplinas que realizaram ao menos uma das avaliações:(AV, NC , AVS,NF)/ Quantidade de alunos disciplinas',
+    ],
+    pulso2: 'Igual ao conceito anterior',
+    hasChangedInV2: false,
+  },
+  {
+    id: 'adesao_sm',
+    indicator: 'Adesão SM',
+    pulso1: [
+      'Presencial: Quantidade alunos disciplinas que realizaram (SM1 ou SM2 e SM3 ou SM4) / Quantidade de alunos disciplinas.',
+      'EAD: Quantidade alunos disciplinas que realizaram (SM1 e SM2) / Quantidade de alunos disciplinas.',
+      '-A partir de 2024.1 todas as modalidade seguem com SM1 e SM2.',
+    ],
+    pulso2: 'Igual ao conceito anterior',
+    hasChangedInV2: false,
+  },
+  {
+    id: 'frequencia',
+    indicator: 'Frequência',
+    pulso1: [
+      'Quantidade de presenças / Quantidade de presença + faltas',
+    ],
+    pulso2: 'Igual ao conceito anterior',
+    hasChangedInV2: false,
+  },
+];
+
+/**
+ * Funções oficiais de cálculo dos indicadores conforme Matriz Pulso 1.0 & Pulso 2.0
+ */
+
+/**
+ * 1. Grau de Aprendizagem (Pulso 1.0 e 2.0):
+ * Total de provas com notas >= nota esperada / Total de provas realizadas
+ */
+export function calculatePulsoLearningGrade(
+  examsMeetingExpectedScore: number,
+  totalExamsCompleted: number
+): number {
+  if (totalExamsCompleted <= 0) return 0;
+  return Number(Math.min(100, Math.max(0, (examsMeetingExpectedScore / totalExamsCompleted) * 100)).toFixed(2));
+}
+
+/**
+ * 2. Reprovação (Pulso 1.0 vs Pulso 2.0):
+ * Expressão da nota final: maior nota entre (AV, NC e AVS) + (SM1 + SM2) < 6
+ * - Pulso 1.0: dividido pela quantidade total de alunos disciplinas
+ * - Pulso 2.0: dividido pela quantidade de alunos disciplinas que realizaram ao menos uma das três avaliações (AV, NC ou AVS)
+ */
+export function calculatePulsoFailureRate(
+  studentsWithGradeBelowSix: number,
+  totalStudentsDisciplines: number,
+  studentsWithAtLeastOneEvaluation: number,
+  version: '1.0' | '2.0' = '2.0'
+): number {
+  const denominator = version === '2.0' ? studentsWithAtLeastOneEvaluation : totalStudentsDisciplines;
+  if (denominator <= 0) return 0;
+  return Number(Math.min(100, Math.max(0, (studentsWithGradeBelowSix / denominator) * 100)).toFixed(2));
+}
+
+/**
+ * Avalia a expressão individual de nota do aluno: maior(AV, NC, AVS) + (SM1 + SM2)
+ */
+export function evaluateStudentFinalExpression(
+  av: number,
+  nc: number,
+  avs: number,
+  sm1: number,
+  sm2: number
+): { finalScore: number; isReproved: boolean } {
+  const maxExam = Math.max(av || 0, nc || 0, avs || 0);
+  const bonusSm = (sm1 || 0) + (sm2 || 0);
+  const finalScore = Number((maxExam + bonusSm).toFixed(2));
+  return {
+    finalScore,
+    isReproved: finalScore < 6.0,
+  };
+}
+
+/**
+ * 3. Tempo de Estudo (Pulso 1.0 e 2.0):
+ * Tempo de navegação no conteúdo da disciplina (em minutos) + 52' para cada download realizado.
+ */
+export function calculatePulsoStudyTime(
+  navigationMinutes: number,
+  downloadsCount: number
+): { totalMinutes: number; formatted: string; hoursDecimal: number } {
+  const totalMinutes = Math.max(0, Math.round(navigationMinutes + downloadsCount * 52));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const formatted = `${hours}:${String(minutes).padStart(2, '0')}`;
+  const hoursDecimal = Number((totalMinutes / 60).toFixed(2));
+  return { totalMinutes, formatted, hoursDecimal };
+}
+
+/**
+ * 4. Adesão AV (Pulso 1.0 e 2.0):
+ * Quantidade alunos disciplinas que realizaram ao menos uma das avaliações (AV, NC, AVS, NF) / Quantidade de alunos disciplinas
+ */
+export function calculatePulsoAdhesionAV(
+  studentsWithAtLeastOneAV: number,
+  totalStudentsDisciplines: number
+): number {
+  if (totalStudentsDisciplines <= 0) return 0;
+  return Number(Math.min(100, Math.max(0, (studentsWithAtLeastOneAV / totalStudentsDisciplines) * 100)).toFixed(2));
+}
+
+/**
+ * 5. Adesão SM (Pulso 1.0 e 2.0):
+ * - Presencial (até 2023): realizaram (SM1 ou SM2 e SM3 ou SM4) / Quantidade de alunos disciplinas
+ * - EAD e Todas as modalidades a partir de 2024.1: realizaram (SM1 e SM2) / Quantidade de alunos disciplinas
+ */
+export function calculatePulsoAdhesionSM(
+  studentsCompletedRequiredSM: number,
+  totalStudentsDisciplines: number
+): number {
+  if (totalStudentsDisciplines <= 0) return 0;
+  return Number(Math.min(100, Math.max(0, (studentsCompletedRequiredSM / totalStudentsDisciplines) * 100)).toFixed(2));
+}
+
+/**
+ * 6. Frequência (Pulso 1.0 e 2.0):
+ * Quantidade de presenças / (Quantidade de presença + faltas)
+ */
+export function calculatePulsoAttendanceRate(
+  presences: number,
+  absences: number
+): number {
+  const total = presences + absences;
+  if (total <= 0) return 0;
+  return Number(Math.min(100, Math.max(0, (presences / total) * 100)).toFixed(2));
+}
+
+
 /**
  * Calculates Learning Health Index (LHI) - 0 to 100
  */
@@ -244,6 +424,20 @@ export function exportAnalyticalWorkbook(
     ...criticalRows,
   ]);
   XLSX.utils.book_append_sheet(wb, wsCritical, 'Matriz de Risco Crítico');
+
+  // Sheet 4: Matriz Conceitual Oficial (Pulso 1.0 vs Pulso 2.0)
+  const conceptualRows = PULSO_CONCEPTUAL_MATRIX.map((row) => [
+    row.indicator,
+    row.pulso1.join('\n'),
+    row.pulso2,
+    PULSO_STRUCTURAL_NOTE,
+  ]);
+  const wsConceptual = XLSX.utils.aoa_to_sheet([
+    ['MATRIZ CONCEITUAL DE INDICADORES — PULSO 1.0 vs. PULSO 2.0'],
+    ['Indicador', 'Pulso 1.0', 'Pulso 2.0', 'Observação Estrutural (Fonte e Modelagem de Dados)'],
+    ...conceptualRows,
+  ]);
+  XLSX.utils.book_append_sheet(wb, wsConceptual, 'Matriz Pulso 1.0 vs 2.0');
 
   // Generate and download
   const filename = `PulsoAcademico_Relatorio_Analitico_${new Date().toISOString().slice(0, 10)}.xlsx`;

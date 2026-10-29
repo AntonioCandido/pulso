@@ -203,7 +203,7 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
           </svg>
         </div>
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="relative z-10 flex flex-col md:flex-row print:flex-row md:items-center print:items-center justify-between gap-4">
           {/* Title Hierarchy with exact 31px font size requested */}
           <div>
             <h1 
@@ -218,16 +218,16 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
           </div>
 
           {/* Slide Metadata */}
-          <div className="text-xs space-y-1 text-slate-100/90 font-medium md:text-right">
-            <div className="flex items-center md:justify-end gap-1.5">
+          <div className="text-xs space-y-1 text-slate-100/90 font-medium md:text-right print:text-right">
+            <div className="flex items-center md:justify-end print:justify-end gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-[#38BDF8]" />
               <span className="font-semibold text-white">{campusLabel}</span>
             </div>
-            <div className="flex items-center md:justify-end gap-1.5">
+            <div className="flex items-center md:justify-end print:justify-end gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-[#38BDF8]" />
               <span>{hasData ? (executive?.entryYear ? `Ano Entrada: ${executive.entryYear} · Período ${config.academicPeriod}` : `Período ${config.academicPeriod}`) : 'Período --'}</span>
             </div>
-            <div className="flex items-center md:justify-end gap-1.5 text-white/80 text-[11px]">
+            <div className="flex items-center md:justify-end print:justify-end gap-1.5 text-white/80 text-[11px]">
               <Clock className="w-3 h-3 text-[#38BDF8]" />
               <span>{lastUpdatedText}</span>
             </div>
@@ -240,7 +240,10 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 print:grid-cols-2 print:gap-4">
           
           {/* HERO CARD 1: TEMPO DE ESTUDO */}
-          <div className="bg-white rounded-xl p-5 border border-slate-200/90 shadow-sm flex items-center justify-between transition-all hover:shadow-md print:shadow-none">
+          <div 
+            className="bg-white rounded-xl p-5 border border-slate-200/90 shadow-sm flex items-center justify-between transition-all hover:shadow-md print:shadow-none"
+            title="Tempo de Estudo (Pulso 1.0 / 2.0): Tempo de navegação no conteúdo da disciplina + 52' para cada download realizado."
+          >
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 rounded-full bg-[#EBF3FB] border-2 border-[#BCD7F2] flex items-center justify-center text-[#0A3977] shrink-0">
                 <Clock className="w-7 h-7" />
@@ -293,7 +296,10 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
           </div>
 
           {/* HERO CARD 2: FREQUÊNCIA */}
-          <div className="bg-white rounded-xl p-5 border border-slate-200/90 shadow-sm flex items-center justify-between transition-all hover:shadow-md print:shadow-none">
+          <div 
+            className="bg-white rounded-xl p-5 border border-slate-200/90 shadow-sm flex items-center justify-between transition-all hover:shadow-md print:shadow-none"
+            title="Frequência (Pulso 1.0 / 2.0): Quantidade de presenças / Quantidade de presença + faltas"
+          >
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 rounded-full bg-[#EBF3FB] border-2 border-[#BCD7F2] flex items-center justify-center text-[#0A3977] shrink-0">
                 <Calendar className="w-7 h-7" />
@@ -346,7 +352,10 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
 
         {/* Governance Strip: Grau de Aprendizagem, Reprovação, Adesão AV, Adesão SM, LHI & ARS */}
         <div className="mt-4 grid grid-cols-2 sm:grid-cols-6 gap-3 print:grid-cols-6 print:gap-2">
-          <div className="bg-white p-3 rounded-lg border border-slate-200 text-xs">
+          <div 
+            className="bg-white p-3 rounded-lg border border-slate-200 text-xs"
+            title="Grau de Aprendizagem (Pulso 1.0 / 2.0): Total de provas com notas >= as notas esperada / Total de provas realizadas. Nota esperada: média da taxa de acerto das questões que compõem cada prova."
+          >
             <div className="text-slate-500 font-medium text-[11px]">Grau de Aprendizagem</div>
             <div className="text-lg font-bold text-slate-800 mt-0.5">{learningScoreDisplay}</div>
             <div className="text-[10px] text-slate-400 mt-0.5 truncate">
@@ -354,7 +363,10 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
             </div>
           </div>
 
-          <div className="bg-white p-3 rounded-lg border border-slate-200 text-xs">
+          <div 
+            className="bg-white p-3 rounded-lg border border-slate-200 text-xs"
+            title="Reprovação (Pulso 2.0): Quantidade de alunos disciplinas com notas <6 na expressão: maior nota entre (AV, NC e AVS) + (SM1+ SM2) dividido pela quantidade alunos disciplinas que realizaram ao menos uma das três avaliações."
+          >
             <div className="text-slate-500 font-medium text-[11px]">Reprovação Geral</div>
             <div className={`text-lg font-bold mt-0.5 ${!hasData ? 'text-slate-400' : 'text-slate-800'}`}>
               {failureRateDisplay}
@@ -364,7 +376,10 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
             </div>
           </div>
 
-          <div className="bg-white p-3 rounded-lg border border-slate-200 text-xs">
+          <div 
+            className="bg-white p-3 rounded-lg border border-slate-200 text-xs"
+            title="Adesão AV (Pulso 1.0 / 2.0): Quantidade alunos disciplinas que realizaram ao menos uma das avaliações: (AV, NC, AVS, NF) / Quantidade de alunos disciplinas"
+          >
             <div className="text-slate-500 font-medium text-[11px]">Adesão AV</div>
             <div className="text-lg font-bold text-slate-800 mt-0.5">{adhesionAVDisplay}</div>
             <div className="text-[10px] text-slate-400 mt-0.5 truncate">
@@ -372,7 +387,10 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
             </div>
           </div>
 
-          <div className="bg-white p-3 rounded-lg border border-slate-200 text-xs">
+          <div 
+            className="bg-white p-3 rounded-lg border border-slate-200 text-xs"
+            title="Adesão SM (Pulso 1.0 / 2.0): A partir de 2024.1 todas as modalidades seguem com SM1 e SM2 (Quantidade alunos disciplinas que realizaram SM1 e SM2 / Quantidade de alunos disciplinas)."
+          >
             <div className="text-slate-500 font-medium text-[11px]">Adesão SM</div>
             <div className="text-lg font-bold text-slate-800 mt-0.5">{adhesionSMDisplay}</div>
             <div className="text-[10px] text-slate-400 mt-0.5 truncate">
@@ -443,7 +461,7 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
             </div>
           ) : (
             /* The Table showing exact data for the active report */
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto print:overflow-visible">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-[#0A3977] text-white font-bold text-[11px] border-b border-[#082E60]">
@@ -549,14 +567,14 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
           )}
 
           {/* 4. Executive Slide Footer with Official Estácio Logo */}
-          <div className="bg-[#EBF3FB] px-6 py-3.5 border-t border-[#BCD7F2] flex flex-col sm:flex-row items-center justify-between gap-3 print:py-2">
+          <div className="bg-[#EBF3FB] px-6 py-3.5 border-t border-[#BCD7F2] flex flex-col sm:flex-row print:flex-row items-center justify-between gap-3 print:py-2">
             <div className="text-[11px] text-slate-600 font-medium">
               Fonte: YDUQS – Pulso Acadêmico (Curso) · {campusLabel} · A.A. = Ano Anterior · {lastUpdatedText}
             </div>
 
             {/* Official Estácio Logo */}
             <div className="flex items-center gap-2 shrink-0">
-              <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider hidden md:inline">
+              <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider hidden md:inline print:inline">
                 Instituição
               </span>
               <div className="bg-white px-3 py-1 rounded shadow-2xs border border-slate-200 flex items-center justify-center">

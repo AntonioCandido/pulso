@@ -3,28 +3,26 @@ import {
   FileSpreadsheet, 
   Presentation, 
   Download, 
-  Printer, 
   Settings, 
-  Terminal, 
   CheckCircle2, 
   Save,
   Upload,
-  Eye,
-  X,
-  Maximize2,
-  FileCheck2,
-  Layers,
-  Sparkles
+  FileDown,
+  Loader2,
+  FileText,
+  AlertCircle
 } from 'lucide-react';
 import { DisciplineMetric, SystemConfig, ImportSession } from '../types';
-import { exportAnalyticalWorkbook, exportPowerPointDeck, exportConfigFile, generateBatchScript } from '../utils/calculations';
-import { ExecutiveDashboardCanvas } from './ExecutiveDashboardCanvas';
+import { exportAnalyticalWorkbook, exportPowerPointDeck, exportConfigFile } from '../utils/calculations';
+import { exportExecutiveDashboardToPdf } from '../utils/pdfExport';
+import { PrintableExecutiveReport } from './PrintableExecutiveReport';
 
 interface ReportingViewProps {
   disciplines: DisciplineMetric[];
   config: SystemConfig;
   onUpdateConfig: (newConfig: SystemConfig) => void;
   activeSession?: ImportSession | null;
+  onNavigateToSources?: () => void;
 }
 
 export const ReportingView: React.FC<ReportingViewProps> = ({
@@ -32,11 +30,13 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
   config,
   onUpdateConfig,
   activeSession,
+  onNavigateToSources,
 }) => {
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [isExportingPptx, setIsExportingPptx] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
-  const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   // Settings form state
   const [institutionName, setInstitutionName] = useState(config.institutionName);
@@ -44,25 +44,39 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
   const [coordinatorName, setCoordinatorName] = useState(config.coordinatorName);
   const [coordinatorEmail, setCoordinatorEmail] = useState(config.coordinatorEmail);
 
-  const hasData = disciplines.length > 0;
-  const campusLabel = !hasData 
-    ? '-- (Base Zerada)' 
-    : activeSession?.campus 
-    ? (activeSession.campus.startsWith('Campus') ? activeSession.campus : `Campus ${activeSession.campus}`)
-    : `Campus ${disciplines[0]?.campus || 'Principal'}`;
-
-  const handlePrintReport = () => {
-    window.print();
+  const handleSavePdf = async () => {
+    setIsExportingPdf(true);
+    setExportError(null);
+    try {
+      const campusName = activeSession?.campus || disciplines[0]?.campus || 'Geral';
+      const cleanCampus = campusName.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const fileName = `Relatorio_Executivo_Dashboard_${cleanCampus}_${dateStr}.pdf`;
+      await exportExecutiveDashboardToPdf('print-executive-report', fileName, {
+        disciplines,
+        activeSession,
+        config,
+      });
+      setExportNotice(`Arquivo PDF (${fileName}) gerado em alta resolução e baixado com sucesso!`);
+      setTimeout(() => setExportNotice(null), 4000);
+    } catch (err: any) {
+      console.error('Erro ao gerar PDF:', err);
+      setExportError('Não foi possível gerar o arquivo PDF: ' + (err?.message || 'Erro na captura'));
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   const handleExportExcel = () => {
     setIsExportingExcel(true);
+    setExportError(null);
     try {
       exportAnalyticalWorkbook(disciplines, config);
       setExportNotice('Planilha analítica Excel (.xlsx) gerada com 3 abas formatadas!');
       setTimeout(() => setExportNotice(null), 4000);
     } catch (err: any) {
       console.error(err);
+      setExportError('Erro ao gerar planilha Excel.');
     } finally {
       setIsExportingExcel(false);
     }
@@ -70,12 +84,14 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
 
   const handleExportPPTX = async () => {
     setIsExportingPptx(true);
+    setExportError(null);
     try {
       await exportPowerPointDeck(disciplines, config);
       setExportNotice('Apresentação executiva PowerPoint (.pptx) gerada em padrão widescreen 16:9!');
       setTimeout(() => setExportNotice(null), 4000);
     } catch (err: any) {
       console.error(err);
+      setExportError('Erro ao gerar apresentação PowerPoint.');
     } finally {
       setIsExportingPptx(false);
     }
@@ -113,166 +129,126 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
           setTimeout(() => setExportNotice(null), 3000);
         }
       } catch (err) {
-        alert('Arquivo de configuração inválido.');
+        setExportError('Arquivo de configuração JSON inválido.');
       }
     };
     reader.readAsText(file);
   };
 
   return (
-    <>
+    <div className="space-y-6">
+      {/* Header bar (no-print) */}
+      <div className="no-print flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+        <div>
+          <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+            <span>Reporting Layer & Governança Corporativa</span>
+            <span aria-hidden="true">·</span>
+            <span>Widescreen 16:9, Impressão & Exportação PDF</span>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Central de Emissão de Relatórios & Apresentações
+          </h1>
+        </div>
+      </div>
+
+      {exportNotice && (
+        <div className="no-print p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md text-xs font-semibold flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{exportNotice}</span>
+        </div>
+      )}
+
+      {exportError && (
+        <div className="no-print p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-md text-xs font-semibold flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+          <span>{exportError}</span>
+        </div>
+      )}
+
       {/* =========================================================================
-          PRINT ONLY CANVAS (Consumed strictly by window.print())
-          Renders the 100% faithful executive dashboard layout matching image_376e7fab.png
+          COMPONENTE: RELATÓRIO EXECUTIVO PARA IMPRESSÃO
+          Renderiza o layout completo do 'Dashboard Executivo' exatamente como ele
+          aparece na tela, utilizando o container #print-executive-report e os estilos
+          definidos em index.css, com botões 'Salvar como PDF' e 'Imprimir Relatório'.
           ========================================================================= */}
-      <div id="print-executive-report" className="hidden print:block w-full">
-        <ExecutiveDashboardCanvas
+      <section aria-label="Relatório Executivo para Impressão">
+        <PrintableExecutiveReport
           disciplines={disciplines}
           activeSession={activeSession}
           config={config}
-          isPrintMode={true}
+          onNavigateToSources={onNavigateToSources}
         />
-      </div>
+      </section>
 
-      {/* Screen Interactive UI */}
-      <div className="space-y-6 no-print">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+      {/* =========================================================================
+          DEMAIS FORMATOS DE EXPORTAÇÃO (PDF Direto, Excel, PowerPoint, Configurações, Batch)
+          Ocultados automaticamente durante a impressão via .no-print
+          ========================================================================= */}
+      <div className="no-print space-y-6 pt-4 border-t border-slate-200">
+        <div className="flex items-center justify-between">
           <div>
-            <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-              <span>Reporting Layer & Governança Corporativa</span>
-              <span aria-hidden="true">·</span>
-              <span>Widescreen 16:9 & Impressão Executiva</span>
-            </div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-              Central de Emissão de Relatórios & Apresentações
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handlePrintReport}
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-[#0A3977] hover:bg-[#072752] rounded-md transition-colors shadow-xs cursor-pointer"
-              title="Imprimir com o layout e design do Dashboard Executivo"
-            >
-              <Printer className="w-4 h-4 text-[#FFB800]" />
-              <span>Imprimir Relatório Executivo</span>
-            </button>
+            <h2 className="text-base font-bold text-slate-900">
+              Formatos de Exportação & Auditoria Complementares
+            </h2>
+            <p className="text-xs text-slate-500">
+              Arquivos analíticos, apresentações em slides e cadernos para prestação de contas colegiada
+            </p>
           </div>
         </div>
 
-        {exportNotice && (
-          <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md text-xs font-semibold flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>{exportNotice}</span>
-          </div>
-        )}
-
-        {/* =========================================================================
-            FEATURED: IMPRESSÃO DO RELATÓRIO EXECUTIVO (LAYOUT DASHBOARD)
-            Direct fulfillment of user request: Designer e layout da Tela "Dashboard Executivo"
-            ========================================================================= */}
-        <div className="bg-white border-2 border-[#0A3977]/30 hover:border-[#0A3977] rounded-xl p-6 shadow-sm transition-all relative overflow-hidden">
-          {/* Subtle top decorative ribbon */}
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#0A3977] via-[#0D47A1] to-[#FFB800]" />
-
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-            <div className="space-y-3 max-w-2xl">
-              <div className="flex items-center gap-2.5">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#0A3977] text-white">
-                  <Printer className="w-3.5 h-3.5 text-[#FFB800]" />
-                  <span>Opção de Impressão Oficial</span>
-                </span>
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-blue-50 text-[#0A3977] border border-blue-200 px-2.5 py-1 rounded-full">
-                  <Sparkles className="w-3 h-3 text-[#FFB800]" />
-                  <span>Layout Idêntico à Tela "Dashboard Executivo"</span>
-                </span>
-                <span className="text-[11px] text-slate-500 font-medium">
-                  Formato Paisagem / Widescreen 16:9
-                </span>
-              </div>
-
-              <div>
-                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                  <span>Imprimir Relatório Executivo (Layout Oficial Dashboard)</span>
-                </h2>
-                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  Gera a impressão ou PDF com a reprodução fidedigna do <strong>Dashboard Executivo</strong>: banner superior institucional em azul marinho (<code className="text-[#0A3977] font-bold font-mono">#0A3977</code>) com tipografia dourada (<code className="text-[#0A3977] font-bold font-mono">#FFB800</code>), marca d'água em losango, cartões hero de <strong>Tempo de Estudo</strong> e <strong>Frequência</strong>, indicadores de governança pedagógica (Grau de Aprendizagem, Reprovação Geral, Adesão AV/SM, LHI, ARS), tabela de <strong>Ranking de Tempo de Estudo</strong> com barras de desempenho e rodapé com chancela oficial Estácio.
-                </p>
-              </div>
-
-              {/* Status Pills */}
-              <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-slate-600">
-                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 rounded-md">
-                  <Layers className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Campus ativo: <strong className="text-slate-800">{campusLabel}</strong></span>
-                </div>
-                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 rounded-md">
-                  <FileCheck2 className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Turmas no relatório: <strong className="text-slate-800">{disciplines.length} disciplinas</strong></span>
-                </div>
-                {activeSession?.fileName && (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 rounded-md truncate max-w-xs" title={activeSession.fileName}>
-                    <span>Arquivo: <strong className="text-slate-800">{activeSession.fileName}</strong></span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Action buttons and visual preview trigger */}
-            <div className="flex flex-col sm:flex-row lg:flex-col gap-2.5 shrink-0 justify-center">
-              <button
-                onClick={handlePrintReport}
-                className="flex items-center justify-center gap-2 px-5 py-3 text-xs font-bold text-white bg-[#0A3977] hover:bg-[#082d5e] active:bg-[#062247] rounded-lg transition-all shadow-sm cursor-pointer"
-              >
-                <Printer className="w-4 h-4 text-[#FFB800]" />
-                <span>Imprimir Relatório Agora</span>
-              </button>
-
-              <button
-                onClick={() => setShowPrintPreview(true)}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-[#0A3977] bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors cursor-pointer"
-              >
-                <Maximize2 className="w-4 h-4 text-[#0A3977]" />
-                <span>Pré-visualizar em Tela Cheia</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Miniature banner snapshot representation */}
-          <div className="mt-5 pt-4 border-t border-slate-100">
-            <div className="bg-[#0A3977] text-white p-3 rounded-lg border-b-2 border-[#FFB800] flex items-center justify-between shadow-xs">
-              <div className="flex items-center gap-3">
-                <div className="w-7 h-7 rounded bg-[#FFB800] text-[#0A3977] font-black flex items-center justify-center text-xs">
-                  P
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* PDF CARD */}
+          <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="p-2.5 rounded-lg bg-rose-50 text-rose-700">
+                  <FileText className="w-6 h-6" />
                 </div>
                 <div>
-                  <span className="text-xs font-black text-[#FFB800] tracking-wide block uppercase">
-                    PULSO ACADÊMICO
-                  </span>
-                  <span className="text-[10px] font-bold text-white uppercase tracking-wider block">
-                    CURSO: CIÊNCIA DA COMPUTAÇÃO · {campusLabel}
-                  </span>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Relatório em PDF (.pdf)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Captura gráfica vetorial/raster de alta resolução (html2canvas + jsPDF)
+                  </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="hidden sm:inline-block text-[10px] text-blue-200">
-                  Layout Widescreen 16:9 Oficial
-                </span>
-                <div className="bg-white px-2 py-0.5 rounded shadow-xs">
-                  <img
-                    src="/assets/aistudio/Logo_estacio_sem_fundo_83f2716c.png"
-                    alt="Logo Estácio"
-                    className="h-4 w-auto object-contain"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
 
-        {/* Existing Secondary Export Cards (Excel & PowerPoint) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <ul className="space-y-2 text-xs text-slate-600 my-4 border-y border-slate-100 py-3">
+                <li className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                  <span><strong>Widescreen 16:9:</strong> Enquadramento automático no padrão paisagem</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                  <span><strong>Design Oficial:</strong> Todas as cores, banners, logos e métricas preservados</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                  <span><strong>Download Imediato:</strong> Não requer configuração manual de impressora</span>
+                </li>
+              </ul>
+            </div>
+
+            <button
+              onClick={handleSavePdf}
+              disabled={isExportingPdf}
+              className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-white bg-rose-700 hover:bg-rose-600 disabled:opacity-60 rounded-md transition-colors shadow-xs cursor-pointer"
+            >
+              {isExportingPdf ? (
+                <>
+                  <Loader2 className="w-4 h-4 text-white animate-spin" />
+                  <span>Gerando PDF...</span>
+                </>
+              ) : (
+                <>
+                  <FileDown className="w-4 h-4" />
+                  <span>Baixar Arquivo PDF (.pdf)</span>
+                </>
+              )}
+            </button>
+          </div>
+
           {/* EXCEL CARD */}
           <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs flex flex-col justify-between">
             <div>
@@ -281,11 +257,11 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
                   <FileSpreadsheet className="w-6 h-6" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-slate-900">
-                    Planilha Analítica Executiva (.xlsx)
-                  </h2>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Planilha Analítica (.xlsx)
+                  </h3>
                   <p className="text-xs text-slate-500">
-                    Caderno de auditoria com fórmulas abertas, matriz de risco e sumário
+                    Caderno com fórmulas abertas, matriz de risco e sumário
                   </p>
                 </div>
               </div>
@@ -293,15 +269,15 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
               <ul className="space-y-2 text-xs text-slate-600 my-4 border-y border-slate-100 py-3">
                 <li className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                  <span><strong>Aba 1 - Sumário Executivo:</strong> KPIs institucionais consolidados e metodologias</span>
+                  <span><strong>Aba 1 - Sumário:</strong> KPIs consolidados</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                  <span><strong>Aba 2 - Auditoria por Disciplina:</strong> Todas as {disciplines.length} turmas com métricas RF02 e índices LHI/ARS</span>
+                  <span><strong>Aba 2 - Auditoria:</strong> {disciplines.length} turmas mapeadas</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                  <span><strong>Aba 3 - Matriz de Risco Crítico:</strong> Coortes com ARS &ge; 50 para convocação pedagógica</span>
+                  <span><strong>Aba 3 - Matriz de Risco:</strong> ARS &ge; 50</span>
                 </li>
               </ul>
             </div>
@@ -312,7 +288,7 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
               className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-600 rounded-md transition-colors shadow-xs cursor-pointer"
             >
               <Download className="w-4 h-4" />
-              <span>{isExportingExcel ? 'Gerando Planilha...' : 'Baixar Caderno Analítico (.xlsx)'}</span>
+              <span>{isExportingExcel ? 'Gerando Planilha...' : 'Baixar Caderno (.xlsx)'}</span>
             </button>
           </div>
 
@@ -324,11 +300,11 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
                   <Presentation className="w-6 h-6" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-slate-900">
-                    Apresentação PowerPoint Widescreen (.pptx)
-                  </h2>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Apresentação (.pptx)
+                  </h3>
                   <p className="text-xs text-slate-500">
-                    Layout 16:9 corporativo com cartões de indicadores, tabelas e recomendações
+                    Layout 16:9 corporativo com cartões de indicadores e tabelas
                   </p>
                 </div>
               </div>
@@ -336,15 +312,15 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
               <ul className="space-y-2 text-xs text-slate-600 my-4 border-y border-slate-100 py-3">
                 <li className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                  <span><strong>Slide 1 - Capa Institucional:</strong> Período {config.academicPeriod}, dados da coordenação</span>
+                  <span><strong>Slide 1:</strong> Capa Institucional</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                  <span><strong>Slide 2 - Executive Dashboard:</strong> Layout oficial com cartões hero e ranking de tempo</span>
+                  <span><strong>Slide 2:</strong> Executive Dashboard</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                  <span><strong>Slide 3 & 4 - Diretrizes & Ações:</strong> Matriz de intervenção e coortes prioritárias</span>
+                  <span><strong>Slide 3 & 4:</strong> Diretrizes & Ações</span>
                 </li>
               </ul>
             </div>
@@ -355,7 +331,7 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
               className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-md transition-colors shadow-xs cursor-pointer"
             >
               <Download className="w-4 h-4" />
-              <span>{isExportingPptx ? 'Gerando Apresentação...' : 'Baixar Apresentação Executiva (.pptx)'}</span>
+              <span>{isExportingPptx ? 'Gerando Slides...' : 'Baixar Apresentação (.pptx)'}</span>
             </button>
           </div>
         </div>
@@ -459,119 +435,7 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
             </div>
           </form>
         </div>
-
-        {/* Windows Automation Batch */}
-        <div className="bg-slate-900 text-white rounded-lg p-5 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Terminal className="w-4 h-4 text-emerald-400" />
-              <h3 className="text-sm font-bold text-white">
-                RNF03: Script de Inicialização Automatizada (executar.bat)
-              </h3>
-            </div>
-            <p className="text-xs text-slate-400">
-              Gera o script batch corporativo para provisionamento do ambiente virtual Python, checagem de dependências e execução local em estações de trabalho Windows.
-            </p>
-          </div>
-
-          <button
-            onClick={() => generateBatchScript(config)}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-900 bg-emerald-400 hover:bg-emerald-300 rounded-md transition-colors shrink-0 font-mono shadow-xs cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Baixar executar.bat</span>
-          </button>
-        </div>
       </div>
-
-      {/* =========================================================================
-          PRINT PREVIEW MODAL (Full Screen WYSIWYG)
-          ========================================================================= */}
-      {showPrintPreview && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex flex-col justify-between p-4 sm:p-6 overflow-y-auto no-print">
-          <div className="bg-white rounded-xl shadow-2xl overflow-hidden max-w-7xl w-full mx-auto flex flex-col my-auto border border-slate-200">
-            {/* Modal Header */}
-            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-[#0A3977] text-[#FFB800]">
-                  <Printer className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <span>Pré-visualização de Impressão — Dashboard Executivo</span>
-                    <span className="text-[10px] font-semibold bg-[#FFB800] text-[#0A3977] px-2 py-0.5 rounded">
-                      Layout Oficial 16:9
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Visualização idêntica ao resultado na folha ou PDF exportado.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handlePrintReport}
-                  className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-[#0A3977] hover:bg-[#082d5e] rounded-md transition-colors cursor-pointer shadow-xs"
-                >
-                  <Printer className="w-4 h-4 text-[#FFB800]" />
-                  <span>Imprimir Agora (Ctrl + P)</span>
-                </button>
-                <button
-                  onClick={() => setShowPrintPreview(false)}
-                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
-                  title="Fechar pré-visualização"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Print Settings Helper Banner */}
-            <div className="bg-blue-50 px-6 py-2.5 border-b border-blue-100 flex items-center justify-between text-xs text-[#0A3977]">
-              <div className="flex items-center gap-2">
-                <Eye className="w-4 h-4 text-[#0A3977]" />
-                <span>
-                  <strong>Configuração recomendada na impressora:</strong> Orientação <strong>Paisagem (Landscape)</strong>, Margens <strong>Mínimas</strong> e habilitar <strong>"Gráficos de plano de fundo"</strong>.
-                </span>
-              </div>
-              <span className="font-semibold">{campusLabel}</span>
-            </div>
-
-            {/* Canvas Preview Container */}
-            <div className="p-6 bg-slate-100 overflow-x-auto">
-              <div className="shadow-lg rounded-lg overflow-hidden bg-white max-w-6xl mx-auto">
-                <ExecutiveDashboardCanvas
-                  disciplines={disciplines}
-                  activeSession={activeSession}
-                  config={config}
-                  isPrintMode={true}
-                />
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
-              <span>{disciplines.length} turmas mapeadas no relatório executivo</span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowPrintPreview(false)}
-                  className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white border border-slate-300 rounded-md cursor-pointer hover:bg-slate-50"
-                >
-                  Fechar
-                </button>
-                <button
-                  onClick={handlePrintReport}
-                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white bg-[#0A3977] hover:bg-[#082d5e] rounded-md cursor-pointer"
-                >
-                  <Printer className="w-3.5 h-3.5 text-[#FFB800]" />
-                  <span>Imprimir Relatório</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+    </div>
   );
 };
