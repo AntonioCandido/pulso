@@ -1323,27 +1323,60 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
               {(() => {
                 const detailRisk = getARSRiskTheme(getARSLevel(viewingDetailItem.ars), viewingDetailItem.ars);
                 const detailHealth = getLHIHealthTheme(getLHIStatus(viewingDetailItem.lhi), viewingDetailItem.lhi);
+                const infreq = Number(Math.max(0, 100 - viewingDetailItem.attendanceRate).toFixed(1));
+                const learnDeficit = Number(Math.max(0, 100 - viewingDetailItem.learningScore).toFixed(1));
+                const contribFail = Number((viewingDetailItem.failureRate * weights.ars.failureRate).toFixed(1));
+                const contribInfreq = Number((infreq * weights.ars.infrequency).toFixed(1));
+                const contribLearn = Number((learnDeficit * weights.ars.learningDeficit).toFixed(1));
+                const contribDrop = Number((viewingDetailItem.dropoutRiskRate * weights.ars.dropoutRisk).toFixed(1));
+
                 return (
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div className={`p-3 rounded-lg border ${detailHealth.bgTint} border-slate-200`}>
-                      <div className="text-[11px] text-slate-600 font-medium">LHI (Saúde Acadêmica)</div>
-                      <div className={`text-base font-extrabold tabular-nums mt-0.5 ${detailHealth.textColor}`}>
-                        {viewingDetailItem.lhi.toFixed(1)} · {getLHIStatus(viewingDetailItem.lhi)}
+                  <>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className={`p-3 rounded-lg border ${detailHealth.bgTint} border-slate-200`}>
+                        <div className="text-[11px] text-slate-600 font-medium">LHI (Saúde Acadêmica)</div>
+                        <div className={`text-base font-extrabold tabular-nums mt-0.5 ${detailHealth.textColor}`}>
+                          {viewingDetailItem.lhi.toFixed(1)} · {getLHIStatus(viewingDetailItem.lhi)}
+                        </div>
+                      </div>
+                      <div className={`p-3 rounded-lg border ${detailRisk.bgTint} ${detailRisk.borderTint}`}>
+                        <div className="text-[11px] text-slate-600 font-medium">ARS (Nível de Risco)</div>
+                        <div className={`text-base font-extrabold tabular-nums mt-0.5 ${detailRisk.textColor}`}>
+                          {viewingDetailItem.ars.toFixed(1)} · {detailRisk.label}
+                        </div>
                       </div>
                     </div>
-                    <div className={`p-3 rounded-lg border ${detailRisk.bgTint} ${detailRisk.borderTint}`}>
-                      <div className="text-[11px] text-slate-600 font-medium">ARS (Risco de Retenção)</div>
-                      <div className={`text-base font-extrabold tabular-nums mt-0.5 ${detailRisk.textColor}`}>
-                        {viewingDetailItem.ars.toFixed(1)} · {detailRisk.label}
+
+                    <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+                      <div className="font-bold text-slate-800">
+                        Motivo / Justificativa do Nível de Risco (ARS = {viewingDetailItem.ars.toFixed(1)}):
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-700 tabular-nums">
+                        <div className="bg-white p-2 rounded border border-slate-200 flex items-center justify-between">
+                          <span>Reprovação ({viewingDetailItem.failureRate}%):</span>
+                          <strong className="text-slate-900">+{contribFail} pts</strong>
+                        </div>
+                        <div className="bg-white p-2 rounded border border-slate-200 flex items-center justify-between">
+                          <span>Infrequência ({infreq}%):</span>
+                          <strong className="text-slate-900">+{contribInfreq} pts</strong>
+                        </div>
+                        <div className="bg-white p-2 rounded border border-slate-200 flex items-center justify-between">
+                          <span>Déficit Aprend. ({learnDeficit}%):</span>
+                          <strong className="text-slate-900">+{contribLearn} pts</strong>
+                        </div>
+                        <div className="bg-white p-2 rounded border border-slate-200 flex items-center justify-between">
+                          <span>Evasão ({viewingDetailItem.dropoutRiskRate}%):</span>
+                          <strong className="text-slate-900">+{contribDrop} pts</strong>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  </>
                 );
               })()}
 
               <div>
                 <div className="font-semibold text-slate-800 mb-1">
-                  Recomendação de Intervenção Pedagógica:
+                  Solução para o Problema / Intervenção Pedagógica Recomendada:
                 </div>
                 <div className="p-3 rounded-lg bg-amber-50/80 border border-amber-200 text-amber-950 font-medium leading-relaxed">
                   {viewingDetailItem.recommendedAction}
