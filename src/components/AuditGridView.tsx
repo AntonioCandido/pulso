@@ -23,10 +23,25 @@ import {
   ChevronRight,
   Scale,
   Copy,
-  Check
+  Check,
+  Target,
+  GraduationCap,
+  School,
+  CheckCircle,
+  ListChecks,
+  Calendar,
+  Sparkles
 } from 'lucide-react';
 import { DisciplineMetric, AcademicCourse, LHIStatus, ARSLevel, FormulaWeights } from '../types';
-import { calculateLHI, calculateARS, getLHIStatus, getARSLevel, getRecommendedPedagogicalAction } from '../utils/calculations';
+import { 
+  calculateLHI, 
+  calculateARS, 
+  getLHIStatus, 
+  getARSLevel, 
+  getRecommendedPedagogicalAction,
+  getDetailedPedagogicalDiagnostic,
+  DetailedPedagogicalDiagnostic
+} from '../utils/calculations';
 
 interface AuditGridViewProps {
   disciplines: DisciplineMetric[];
@@ -1286,7 +1301,7 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
       {/* MODAL 2: Detail Pedagogical Drawer */}
       {viewingDetailItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-lg w-full p-6 animate-in fade-in zoom-in duration-150 text-xs">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-2xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 animate-in fade-in zoom-in duration-150 text-xs">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
@@ -1414,14 +1429,78 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                 );
               })()}
 
-              <div>
-                <div className="font-semibold text-slate-800 mb-1">
-                  Solução para o Problema / Intervenção Pedagógica Recomendada:
-                </div>
-                <div className="p-3 rounded-lg bg-amber-50/80 border border-amber-200 text-amber-950 font-medium leading-relaxed">
-                  {viewingDetailItem.recommendedAction}
-                </div>
-              </div>
+              {(() => {
+                const detailDiag = getDetailedPedagogicalDiagnostic(viewingDetailItem);
+                return (
+                  <div className="space-y-3 pt-1">
+                    <div className="p-3.5 rounded-lg bg-amber-50/90 border border-amber-200 text-amber-950 space-y-1.5 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-amber-900 flex items-center gap-1.5">
+                          <BookOpen className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Solução para o Problema / Intervenção Pedagógica:</span>
+                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${detailDiag.priority.badgeBg} ${detailDiag.priority.badgeText} ${detailDiag.priority.badgeBorder}`}>
+                          {detailDiag.priority.label}
+                        </span>
+                      </div>
+                      <p className="font-semibold text-xs leading-relaxed text-amber-950">
+                        {viewingDetailItem.recommendedAction}
+                      </p>
+                      <p className="text-[11px] text-amber-900/90 pt-1 leading-relaxed border-t border-amber-200/60">
+                        {detailDiag.executiveSummary}
+                      </p>
+                    </div>
+
+                    {/* 3 Action Pillars */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                      <div className="p-2.5 bg-white rounded border border-slate-200 space-y-1">
+                        <div className="font-bold text-slate-800 flex items-center gap-1">
+                          <GraduationCap className="w-3.5 h-3.5 text-[#0A3977]" />
+                          <span>Eixo Docente</span>
+                        </div>
+                        <ul className="space-y-1 text-slate-600">
+                          {detailDiag.actionPlan.faculty.map((act, i) => (
+                            <li key={i} className="flex items-start gap-1">
+                              <span className="text-[#0A3977] font-bold">•</span>
+                              <span>{act}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="p-2.5 bg-white rounded border border-slate-200 space-y-1">
+                        <div className="font-bold text-slate-800 flex items-center gap-1">
+                          <School className="w-3.5 h-3.5 text-[#0A3977]" />
+                          <span>Coordenação</span>
+                        </div>
+                        <ul className="space-y-1 text-slate-600">
+                          {detailDiag.actionPlan.coordination.map((act, i) => (
+                            <li key={i} className="flex items-start gap-1">
+                              <span className="text-[#0A3977] font-bold">•</span>
+                              <span>{act}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="p-2.5 bg-white rounded border border-slate-200 space-y-1">
+                        <div className="font-bold text-slate-800 flex items-center gap-1">
+                          <Users className="w-3.5 h-3.5 text-emerald-700" />
+                          <span>Alunos & Monitoria</span>
+                        </div>
+                        <ul className="space-y-1 text-slate-600">
+                          {detailDiag.actionPlan.students.map((act, i) => (
+                            <li key={i} className="flex items-start gap-1">
+                              <span className="text-emerald-700 font-bold">•</span>
+                              <span>{act}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {viewingDetailItem.auditNote && (
                 <div>
@@ -1477,6 +1556,9 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
         const arsRiskTheme = getARSRiskTheme(arsLevel, item.ars);
         const isArsConsistent = Math.abs(arsRawTotal - item.ars) < 0.25;
 
+        // Comprehensive Pedagogical Diagnostic for this discipline
+        const diag = getDetailedPedagogicalDiagnostic(item);
+
         const handleCopyMemory = () => {
           const text = [
             `=================================================================`,
@@ -1503,6 +1585,27 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
             `• Risco de Evasão: ${item.dropoutRiskRate}% × ${(weights.ars.dropoutRisk * 100).toFixed(0)}% = +${arsDropContrib} pts`,
             `Somatório: ${arsFailContrib} + ${arsInfreqContrib} + ${arsDeficitContrib} + ${arsDropContrib} = ${arsRawTotal} pts`,
             `ARS Final Apresentado: ${item.ars.toFixed(1)} pts (${arsLevel}) — ${isArsConsistent ? 'Auditado com Sucesso' : 'Aviso: Divergência'}`,
+            ``,
+            `3. DIAGNÓSTICO PEDAGÓGICO E AÇÃO RECOMENDADA`,
+            `Prioridade: ${diag.priority.label} (${diag.priority.timeline})`,
+            `Diretriz Executiva: ${item.recommendedAction}`,
+            `Síntese Contextual: ${diag.executiveSummary}`,
+            ``,
+            `Diagnóstico por Indicador:`,
+            `• Aprendizagem: ${diag.indicatorsDiagnosis.learning.value} (${diag.indicatorsDiagnosis.learning.status}) - ${diag.indicatorsDiagnosis.learning.text}`,
+            `• Reprovação: ${diag.indicatorsDiagnosis.failure.value} (${diag.indicatorsDiagnosis.failure.status}) - ${diag.indicatorsDiagnosis.failure.text}`,
+            `• Assiduidade: ${diag.indicatorsDiagnosis.attendance.value} (${diag.indicatorsDiagnosis.attendance.status}) - ${diag.indicatorsDiagnosis.attendance.text}`,
+            `• Engajamento LMS: ${diag.indicatorsDiagnosis.engagement.value} (${diag.indicatorsDiagnosis.engagement.status}) - ${diag.indicatorsDiagnosis.engagement.text}`,
+            ``,
+            `Plano Tático Operacional:`,
+            `[Eixo Docente - ${item.professor}]`,
+            ...diag.actionPlan.faculty.map((a, i) => `  ${i + 1}. ${a}`),
+            `[Eixo Coordenação - ${item.course}]`,
+            ...diag.actionPlan.coordination.map((a, i) => `  ${i + 1}. ${a}`),
+            `[Eixo Discentes & Monitoria - ${item.totalStudents} alunos]`,
+            ...diag.actionPlan.students.map((a, i) => `  ${i + 1}. ${a}`),
+            ``,
+            `Metas da Turma: Aprendizagem ${diag.targets.targetLearning} | Reprovação ${diag.targets.targetFailure} | Frequência ${diag.targets.targetAttendance} | LMS ${diag.targets.targetLms}`,
             `=================================================================`
           ].join('\n');
 
@@ -2100,23 +2203,246 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                   )}
                 </div>
 
-                {/* Pedagogical Action & Governance Section */}
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
-                      <BookOpen className="w-4 h-4 text-[#0A3977]" />
-                      <span>Diagnóstico Pedagógico e Ação Recomendada:</span>
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-medium">
-                      Acionado pelo cruzamento de ARS ({item.ars.toFixed(1)}) e LHI ({item.lhi.toFixed(1)})
-                    </span>
+                {/* Pedagogical Action & Governance Section - Complemented with multi-dimensional analysis */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 sm:p-5 space-y-4 shadow-2xs">
+                  {/* 1. Header with Title, Priority, Timeline & Trigger */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-200">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="p-1 rounded bg-[#0A3977] text-white">
+                          <BookOpen className="w-4 h-4" />
+                        </span>
+                        <h3 className="font-bold text-sm text-slate-900 tracking-tight">
+                          Diagnóstico Pedagógico e Ação Recomendada
+                        </h3>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${diag.priority.badgeBg} ${diag.priority.badgeText} ${diag.priority.badgeBorder}`}>
+                          {diag.priority.label}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Análise diagnóstica aprofundada para a disciplina <strong>{item.name}</strong> ({item.code} · Turma {item.classCode})
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                      <span className="flex items-center gap-1.5 text-slate-600 bg-white px-2.5 py-1 rounded-md border border-slate-200 font-medium shadow-2xs">
+                        <Calendar className="w-3.5 h-3.5 text-[#0A3977]" />
+                        <span>{diag.priority.timeline}</span>
+                      </span>
+                      <span className="text-slate-400 hidden sm:inline">·</span>
+                      <span className="text-[11px] font-semibold text-slate-600">
+                        Acionado pelo cruzamento de ARS ({item.ars.toFixed(1)} · {getARSLevel(item.ars)}) e LHI ({item.lhi.toFixed(1)} · {getLHIStatus(item.lhi)})
+                      </span>
+                    </div>
                   </div>
-                  <div className="p-3 rounded-lg bg-amber-50/90 border border-amber-200 text-amber-950 font-medium text-xs leading-relaxed">
-                    {item.recommendedAction}
+
+                  {/* 2. Diretriz Executiva Síntese (Destaque Principal) */}
+                  <div className="p-3.5 rounded-lg bg-gradient-to-r from-amber-50/90 via-amber-50 to-orange-50/60 border border-amber-200 text-amber-950 space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-700" />
+                        <span>Diretriz Executiva de Intervenção Pedagógica:</span>
+                      </span>
+                      <span className="text-[10px] font-semibold text-amber-800 bg-amber-100/70 px-2 py-0.5 rounded border border-amber-200/80">
+                        Docente Responsável: {item.professor}
+                      </span>
+                    </div>
+                    <p className="font-semibold text-xs leading-relaxed text-amber-950">
+                      {item.recommendedAction}
+                    </p>
+                    <p className="text-[11px] text-amber-900/90 pt-1.5 leading-relaxed border-t border-amber-200/60">
+                      {diag.executiveSummary}
+                    </p>
                   </div>
+
+                  {/* 3. Diagnóstico Analítico Multidimensional dos 4 Indicadores */}
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                      <Activity className="w-3.5 h-3.5 text-[#0A3977]" />
+                      <span>Diagnóstico Específico por Indicador da Disciplina:</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {/* Aprendizagem */}
+                      <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1 shadow-2xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-800 flex items-center gap-1">
+                            <Target className="w-3.5 h-3.5 text-blue-600" />
+                            <span>{diag.indicatorsDiagnosis.learning.label}</span>
+                          </span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            diag.indicatorsDiagnosis.learning.status === 'Crítico' ? 'bg-rose-100 text-rose-700 border border-rose-200' :
+                            diag.indicatorsDiagnosis.learning.status === 'Alerta' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                            'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          }`}>
+                            {diag.indicatorsDiagnosis.learning.value} · {diag.indicatorsDiagnosis.learning.status}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-snug">
+                          {diag.indicatorsDiagnosis.learning.text}
+                        </p>
+                      </div>
+
+                      {/* Reprovação */}
+                      <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1 shadow-2xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-800 flex items-center gap-1">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                            <span>{diag.indicatorsDiagnosis.failure.label}</span>
+                          </span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            diag.indicatorsDiagnosis.failure.status === 'Crítico' ? 'bg-rose-100 text-rose-700 border border-rose-200' :
+                            diag.indicatorsDiagnosis.failure.status === 'Alerta' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                            'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          }`}>
+                            {diag.indicatorsDiagnosis.failure.value} · {diag.indicatorsDiagnosis.failure.status}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-snug">
+                          {diag.indicatorsDiagnosis.failure.text}
+                        </p>
+                      </div>
+
+                      {/* Frequência */}
+                      <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1 shadow-2xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-800 flex items-center gap-1">
+                            <Users className="w-3.5 h-3.5 text-teal-600" />
+                            <span>{diag.indicatorsDiagnosis.attendance.label}</span>
+                          </span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            diag.indicatorsDiagnosis.attendance.status === 'Crítico' ? 'bg-rose-100 text-rose-700 border border-rose-200' :
+                            diag.indicatorsDiagnosis.attendance.status === 'Alerta' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                            'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          }`}>
+                            {diag.indicatorsDiagnosis.attendance.value} · {diag.indicatorsDiagnosis.attendance.status}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-snug">
+                          {diag.indicatorsDiagnosis.attendance.text}
+                        </p>
+                      </div>
+
+                      {/* Adesão LMS & Estudo */}
+                      <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1 shadow-2xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-800 flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>{diag.indicatorsDiagnosis.engagement.label}</span>
+                          </span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            diag.indicatorsDiagnosis.engagement.status === 'Crítico' ? 'bg-rose-100 text-rose-700 border border-rose-200' :
+                            diag.indicatorsDiagnosis.engagement.status === 'Alerta' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                            'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          }`}>
+                            {diag.indicatorsDiagnosis.engagement.value} · {diag.indicatorsDiagnosis.engagement.status}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-snug">
+                          {diag.indicatorsDiagnosis.engagement.text}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. Plano Tático Operacional em 3 Eixos */}
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                      <ListChecks className="w-3.5 h-3.5 text-[#0A3977]" />
+                      <span>Plano de Ação Tático Operacional (3 Eixos Integrados):</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                      {/* Eixo Docente */}
+                      <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2 shadow-2xs">
+                        <div className="flex items-center gap-1.5 pb-1.5 border-b border-slate-100">
+                          <GraduationCap className="w-4 h-4 text-[#0A3977]" />
+                          <span className="font-bold text-xs text-slate-900">Eixo Docente</span>
+                          <span className="text-[10px] text-slate-400">({item.professor})</span>
+                        </div>
+                        <ul className="space-y-1.5 text-[11px] text-slate-700">
+                          {diag.actionPlan.faculty.map((act, i) => (
+                            <li key={i} className="flex items-start gap-1.5 leading-relaxed">
+                              <span className="text-[#0A3977] font-bold shrink-0 mt-0.5">•</span>
+                              <span>{act}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Eixo Coordenação */}
+                      <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2 shadow-2xs">
+                        <div className="flex items-center gap-1.5 pb-1.5 border-b border-slate-100">
+                          <School className="w-4 h-4 text-[#0A3977]" />
+                          <span className="font-bold text-xs text-slate-900">Coordenação de Curso</span>
+                          <span className="text-[10px] text-slate-400">({item.course})</span>
+                        </div>
+                        <ul className="space-y-1.5 text-[11px] text-slate-700">
+                          {diag.actionPlan.coordination.map((act, i) => (
+                            <li key={i} className="flex items-start gap-1.5 leading-relaxed">
+                              <span className="text-[#0A3977] font-bold shrink-0 mt-0.5">•</span>
+                              <span>{act}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Eixo Discente & Monitoria */}
+                      <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2 shadow-2xs">
+                        <div className="flex items-center gap-1.5 pb-1.5 border-b border-slate-100">
+                          <Users className="w-4 h-4 text-emerald-700" />
+                          <span className="font-bold text-xs text-slate-900">Discentes & Monitoria</span>
+                          <span className="text-[10px] text-slate-400">({item.totalStudents} alunos)</span>
+                        </div>
+                        <ul className="space-y-1.5 text-[11px] text-slate-700">
+                          {diag.actionPlan.students.map((act, i) => (
+                            <li key={i} className="flex items-start gap-1.5 leading-relaxed">
+                              <span className="text-emerald-700 font-bold shrink-0 mt-0.5">•</span>
+                              <span>{act}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 5. Metas Quantitativas de Recuperação (KPI Targets) */}
+                  <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                        <Target className="w-3.5 h-3.5 text-[#0A3977]" />
+                        <span>Metas e Indicadores de Sucesso para a Turma (Alvos do Pulso 2.0):</span>
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        Monitoramento via Colegiado de Curso
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                      <div className="p-2 bg-slate-50 rounded border border-slate-100">
+                        <div className="text-[10px] text-slate-500">Meta Aprendizagem</div>
+                        <div className="font-bold text-slate-900 text-sm mt-0.5">{diag.targets.targetLearning}</div>
+                        <div className="text-[10px] text-slate-400">Atual: {item.learningScore}%</div>
+                      </div>
+                      <div className="p-2 bg-slate-50 rounded border border-slate-100">
+                        <div className="text-[10px] text-slate-500">Teto Reprovação</div>
+                        <div className="font-bold text-slate-900 text-sm mt-0.5">{diag.targets.targetFailure}</div>
+                        <div className="text-[10px] text-slate-400">Atual: {item.failureRate}%</div>
+                      </div>
+                      <div className="p-2 bg-slate-50 rounded border border-slate-100">
+                        <div className="text-[10px] text-slate-500">Piso Frequência</div>
+                        <div className="font-bold text-slate-900 text-sm mt-0.5">{diag.targets.targetAttendance}</div>
+                        <div className="text-[10px] text-slate-400">Atual: {item.attendanceRate}%</div>
+                      </div>
+                      <div className="p-2 bg-slate-50 rounded border border-slate-100">
+                        <div className="text-[10px] text-slate-500">Meta Adesão LMS</div>
+                        <div className="font-bold text-slate-900 text-sm mt-0.5">{diag.targets.targetLms}</div>
+                        <div className="text-[10px] text-slate-400">Atual: {item.lmsAdherenceRate}%</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 6. Histórico de Auditoria se houver */}
                   {item.auditNote && (
-                    <div className="text-[11px] text-slate-600 bg-white p-2.5 rounded border border-slate-200 font-mono">
-                      <strong>Nota de Auditoria:</strong> &ldquo;{item.auditNote}&rdquo; (Atualizado em {item.lastUpdated})
+                    <div className="text-[11px] text-slate-600 bg-white p-2.5 rounded-lg border border-slate-200 font-mono">
+                      <strong>Registro de Auditoria / Observação da Coordenação:</strong> &ldquo;{item.auditNote}&rdquo; (Atualizado em {item.lastUpdated})
                     </div>
                   )}
                 </div>

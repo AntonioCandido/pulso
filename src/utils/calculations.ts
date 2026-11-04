@@ -341,6 +341,181 @@ export function getRecommendedPedagogicalAction(item: DisciplineMetric): string 
   return 'Monitoramento padrão e manutenção das boas práticas metodológicas.';
 }
 
+export interface DetailedPedagogicalDiagnostic {
+  priority: {
+    level: 'Crítico' | 'Alto' | 'Moderado' | 'Rotina';
+    label: string;
+    timeline: string;
+    badgeBg: string;
+    badgeText: string;
+    badgeBorder: string;
+  };
+  executiveSummary: string;
+  indicatorsDiagnosis: {
+    learning: { status: 'Crítico' | 'Alerta' | 'Saudável'; label: string; text: string; value: string };
+    failure: { status: 'Crítico' | 'Alerta' | 'Saudável'; label: string; text: string; value: string };
+    attendance: { status: 'Crítico' | 'Alerta' | 'Saudável'; label: string; text: string; value: string };
+    engagement: { status: 'Crítico' | 'Alerta' | 'Saudável'; label: string; text: string; value: string };
+  };
+  actionPlan: {
+    faculty: string[];
+    coordination: string[];
+    students: string[];
+  };
+  targets: {
+    targetLearning: string;
+    targetFailure: string;
+    targetAttendance: string;
+    targetLms: string;
+  };
+}
+
+export function getDetailedPedagogicalDiagnostic(item: DisciplineMetric): DetailedPedagogicalDiagnostic {
+  // 1. Priority determination
+  let priority: DetailedPedagogicalDiagnostic['priority'];
+  if (item.ars >= 65 || item.failureRate >= 30) {
+    priority = {
+      level: 'Crítico',
+      label: 'Intervenção Imediata (Emergencial)',
+      timeline: 'Plano de Ação em até 48h (Pré-Conselho)',
+      badgeBg: 'bg-rose-100',
+      badgeText: 'text-rose-800',
+      badgeBorder: 'border-rose-300',
+    };
+  } else if (item.ars >= 45 || item.failureRate >= 20 || item.learningScore < 50) {
+    priority = {
+      level: 'Alto',
+      label: 'Prioridade Alta (Ação Tática)',
+      timeline: 'Executar alinhamento em até 5 dias úteis',
+      badgeBg: 'bg-orange-100',
+      badgeText: 'text-orange-800',
+      badgeBorder: 'border-orange-300',
+    };
+  } else if (item.ars >= 25 || item.learningScore < 60 || item.attendanceRate < 78) {
+    priority = {
+      level: 'Moderado',
+      label: 'Atenção Preventiva (Monitoramento Ativo)',
+      timeline: 'Acompanhamento quinzenal contínuo',
+      badgeBg: 'bg-amber-100',
+      badgeText: 'text-amber-800',
+      badgeBorder: 'border-amber-300',
+    };
+  } else {
+    priority = {
+      level: 'Rotina',
+      label: 'Monitoramento Padrão (Turma Estável)',
+      timeline: 'Ciclo bimestral ordinário de governança',
+      badgeBg: 'bg-emerald-100',
+      badgeText: 'text-emerald-800',
+      badgeBorder: 'border-emerald-300',
+    };
+  }
+
+  // 2. Executive narrative summary
+  let executiveSummary = `A turma de ${item.name} (${item.code} · Turma ${item.classCode}) sob docência de ${item.professor} apresenta LHI de ${item.lhi.toFixed(1)} pts (${getLHIStatus(item.lhi)}) e ARS de ${item.ars.toFixed(1)} pts (${getARSLevel(item.ars)}). `;
+  if (item.ars >= 65) {
+    executiveSummary += `O índice de risco está crítico, demandando tutoria intensiva imediata e reestruturação avaliativa antes do fechamento do semestre.`;
+  } else if (item.failureRate > 25) {
+    executiveSummary += `A taxa de reprovação de ${item.failureRate}% está acima do teto institucional, recomendando plantão de dúvidas focado em AVS e simulados SM.`;
+  } else if (item.learningScore < 55) {
+    executiveSummary += `Identificado déficit de aprendizagem (${(100 - item.learningScore).toFixed(1)}% abaixo da nota esperada), necessitando nivelamento prático dos tópicos centrais da ementa.`;
+  } else if (item.attendanceRate < 78) {
+    executiveSummary += `O ponto de maior atenção reside na assiduidade discente (${item.attendanceRate}%), exigindo busca ativa contra reprovação por faltas.`;
+  } else {
+    executiveSummary += `A disciplina demonstra indicadores equilibrados, com frequência favorável (${item.attendanceRate}%) e boa adesão às dinâmicas acadêmicas (${item.lmsAdherenceRate}%).`;
+  }
+
+  // 3. Multidimensional indicator diagnostics
+  const learnStatus: 'Crítico' | 'Alerta' | 'Saudável' = item.learningScore < 50 ? 'Crítico' : item.learningScore < 65 ? 'Alerta' : 'Saudável';
+  const learnText = item.learningScore < 50
+    ? `Déficit acentuado de ${(100 - item.learningScore).toFixed(1)}% nas provas em relação à nota esperada. Alunos com dificuldade nos tópicos estruturantes.`
+    : item.learningScore < 65
+    ? `Grau de aprendizagem moderado (${item.learningScore}%). Necessita reforço de exercícios e nivelamento pré-AV.`
+    : `Grau de aprendizagem satisfatório (${item.learningScore}%), demonstrando assimilação dos conteúdos programáticos.`;
+
+  const failStatus: 'Crítico' | 'Alerta' | 'Saudável' = item.failureRate >= 25 ? 'Crítico' : item.failureRate >= 15 ? 'Alerta' : 'Saudável';
+  const failText = item.failureRate >= 25
+    ? `Reprovação em patamar crítico (${item.failureRate}% no Pulso 2.0). Expressão maior(AV, NC, AVS) + SM < 6 ameaça a retenção da turma.`
+    : item.failureRate >= 15
+    ? `Taxa de reprovação em alerta (${item.failureRate}%). Monitorar alunos na faixa de nota 4.0 a 5.9 antes da AVS.`
+    : `Índice de reprovação controlado (${item.failureRate}%), dentro da meta de retenção institucional.`;
+
+  const attStatus: 'Crítico' | 'Alerta' | 'Saudável' = item.attendanceRate < 75 ? 'Crítico' : item.attendanceRate < 80 ? 'Alerta' : 'Saudável';
+  const attText = item.attendanceRate < 75
+    ? `Assiduidade crítica (${item.attendanceRate}%). Risco elevado de reprovação por frequência (RF) e desengajamento presencial.`
+    : item.attendanceRate < 80
+    ? `Frequência limítrofe (${item.attendanceRate}%). Recomenda-se acompanhamento de alunos faltosos recorrentes.`
+    : `Presença consolidada (${item.attendanceRate}%), atuando como importante fator de proteção e engajamento.`;
+
+  const engStatus: 'Crítico' | 'Alerta' | 'Saudável' = (item.lmsAdherenceRate < 60 || item.studyHoursPerWeek < 3) ? 'Crítico' : item.lmsAdherenceRate < 75 ? 'Alerta' : 'Saudável';
+  const engText = (item.lmsAdherenceRate < 60 || item.studyHoursPerWeek < 3)
+    ? `Baixa adesão virtual (${item.lmsAdherenceRate}%) e poucas horas de dedicação (${item.studyTimeFormatted || `${item.studyHoursPerWeek}h`}). Alunos não realizam simulados.`
+    : item.lmsAdherenceRate < 75
+    ? `Adesão intermediária ao LMS (${item.lmsAdherenceRate}%). Há potencial para ampliar a realização dos simulados SM1 e SM2.`
+    : `Excelente adesão ao ambiente virtual (${item.lmsAdherenceRate}%) com bom tempo de estudo acumulado (${item.studyTimeFormatted || `${item.studyHoursPerWeek}h`}).`;
+
+  // 4. Action plan tailored to the discipline and metrics
+  const isNetworkingOrSystems = /redes|protocolos|sistemas|infraestrutura|arquitetura/i.test(item.name);
+  const isCodingOrMath = /algoritmo|programa|dados|software|lógica|cálculo|estrutura/i.test(item.name);
+  const isManagementOrGov = /engenharia|governança|gestão|qualidade|segurança|projeto/i.test(item.name);
+
+  const facultyAction1 = isNetworkingOrSystems
+    ? `Aulas práticas em laboratório com simuladores (ex: Cisco Packet Tracer / Wireshark) para consolidar a teoria dos protocolos.`
+    : isCodingOrMath
+    ? `Plantão de resolução comentada de código/algoritmos com foco em casos de teste reais e depuração passo a passo.`
+    : isManagementOrGov
+    ? `Metodologias ativas com estudos de caso corporativos reais e dinâmicas de tomada de decisão em equipe.`
+    : `Mapeamento das questões de prova com maior índice de erro para aplicação de aula diagnóstica de revisão pré-avaliação.`;
+
+  const facultyAction2 = item.failureRate >= 20
+    ? `Disponibilização de lista preparatória comentada para a AVS, reforçando os 3 tópicos com pior desempenho nas avaliações parciais.`
+    : `Incentivo contínuo à realização dos Simulados SM1 e SM2 como instrumento diagnóstico de aprendizagem e bonificação na nota.`;
+
+  const facultyAction3 = `Feedback pedagógico formativo individualizado aos alunos que obtiveram pontuação inferior a 6.0 pontos.`;
+
+  const coordAction1 = (item.dropoutRiskRate > 5 || item.failureRate >= 20)
+    ? `Acionamento de busca ativa e contato telefônico/WhatsApp com discentes que não realizaram AV ou com risco iminente de abandono.`
+    : `Alinhamento pedagógico mensal com o docente ${item.professor} para monitorar a curva de rendimento e fechamento das etapas.`;
+
+  const coordAction2 = item.attendanceRate < 80
+    ? `Emissão de alerta formal de frequência para os discentes que ultrapassaram 15% de faltas regulamentares.`
+    : `Validação do lançamento tempestivo de frequências e notas parciais no sistema acadêmico institucional.`;
+
+  const coordAction3 = `Pauta de acompanhamento prioritário da turma na próxima reunião de Colegiado de Curso / NDE.`;
+
+  const studentAction1 = `Convocação e direcionamento dos discentes com dificuldades para a Monitoria Acadêmica orientada por bolsistas de TI.`;
+  const studentAction2 = `Estímulo intensivo à conclusão dos Simulados SM1 e SM2 na plataforma LMS (pontuação de até 2.0 pontos na composição final).`;
+  const studentAction3 = `Orientação de rotina de estudos com download dos roteiros de aula e materiais complementares (+52 min por download computados no Pulso).`;
+
+  // 5. Recovery KPI Targets
+  const targetLearning = `≥ ${Math.max(65, Math.min(85, Math.round(item.learningScore + 10)))}%`;
+  const targetFailure = `≤ ${Math.max(10, Math.min(18, Math.round(item.failureRate * 0.75)))}%`;
+  const targetAttendance = `≥ 80.0%`;
+  const targetLms = `≥ 85.0%`;
+
+  return {
+    priority,
+    executiveSummary,
+    indicatorsDiagnosis: {
+      learning: { status: learnStatus, label: 'Grau de Aprendizagem', text: learnText, value: `${item.learningScore.toFixed(1)}%` },
+      failure: { status: failStatus, label: 'Reprovação Pulso 2.0', text: failText, value: `${item.failureRate.toFixed(1)}%` },
+      attendance: { status: attStatus, label: 'Assiduidade Discente', text: attText, value: `${item.attendanceRate.toFixed(1)}%` },
+      engagement: { status: engStatus, label: 'Adesão LMS & Estudo', text: engText, value: `${item.lmsAdherenceRate.toFixed(1)}%` },
+    },
+    actionPlan: {
+      faculty: [facultyAction1, facultyAction2, facultyAction3],
+      coordination: [coordAction1, coordAction2, coordAction3],
+      students: [studentAction1, studentAction2, studentAction3],
+    },
+    targets: {
+      targetLearning,
+      targetFailure,
+      targetAttendance,
+      targetLms,
+    },
+  };
+}
+
 /**
  * Recalculate metrics for an array of disciplines based on current weights and Pulso 2.0 rules
  */
