@@ -3,10 +3,80 @@ import { jsPDF } from 'jspdf';
 import { DisciplineMetric, ImportSession, SystemConfig } from '../types';
 
 /**
+ * Fases do ciclo de vida da exportação em PDF para feedback reativo na UI.
+ */
+export type ExportStage = 'preparing' | 'capturing' | 'compiling' | 'saving' | 'completed' | 'cancelled';
+
+export interface ExportProgressUpdate {
+  stage: ExportStage;
+  percent: number;
+  message: string;
+}
+
+export type ExportProgressCallback = (update: ExportProgressUpdate) => void;
+
+export interface ExportPdfOptions {
+  elementId?: string;
+  customFileName?: string;
+  fallbackContext?: {
+    disciplines: DisciplineMetric[];
+    activeSession?: ImportSession | null;
+    config?: SystemConfig;
+  };
+  fileHandle?: any;
+  scale?: number;
+  onProgress?: ExportProgressCallback;
+  signal?: AbortSignal;
+}
+
+export interface ExportPdfResult {
+  fileName: string;
+  savedViaSystemPicker: boolean;
+  byteSize?: number;
+  pageCount: number;
+}
+
+/**
+ * Sanitiza o nome do arquivo para garantir compatibilidade com sistemas de arquivos (Windows, macOS, Linux).
+ * Remove caracteres proibidos: / \ : * ? " < > | e espaços redundantes.
+ */
+export function sanitizePdfFileName(rawName: string, fallback = 'Relatorio_Executivo.pdf'): string {
+  if (!rawName || !rawName.trim()) return fallback;
+  const cleaned = rawName
+    .trim()
+    .replace(/[/\\:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_');
+  return cleaned.toLowerCase().endsWith('.pdf') ? cleaned : `${cleaned}.pdf`;
+}
+
+/**
+ * Função utilitária para descarregar a Main Thread (CPU yielding).
+ * Permite que o navegador processe eventos de renderização, animações de spinner e cliques de cancelamento.
+ */
+export function yieldToMainThread(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => setTimeout(resolve, 0));
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+}
+
+/**
  * Converte qualquer função de cor CSS moderna (oklch, oklab, color-mix, lab, lch, color)
  * em formato rgb() / rgba() compatível com html2canvas usando o motor nativo 2D do navegador.
  */
-function createColorConverter() {
+export function createColorConverter() {
+  if (typeof document === 'undefined') {
+    return {
+      toRgba: (c: string) => c,
+      replaceModernColorFunctions: (i: string) => i,
+      dispose: () => {},
+    };
+  }
+
   const canvas = document.createElement('canvas');
   canvas.width = 1;
   canvas.height = 1;
@@ -62,14 +132,22 @@ function createColorConverter() {
     return output;
   };
 
-  return { toRgba, replaceModernColorFunctions };
+  const dispose = () => {
+    cache.clear();
+    canvas.width = 0;
+    canvas.height = 0;
+  };
+
+  return { toRgba, replaceModernColorFunctions, dispose };
 }
 
 /**
- * Aguarda o carregamento completo de todas as imagens dentro de um container.
+ * Aguarda o carregamento completo de todas as imagens dentro de um container com timeout defensivo.
  */
-async function waitForImages(root: HTMLElement): Promise<void> {
+export async function waitForImages(root: HTMLElement, timeoutMs = 2000): Promise<void> {
   const images = Array.from(root.querySelectorAll('img'));
+  if (images.length === 0) return;
+
   await Promise.all(
     images.map(
       (img) =>
@@ -85,10 +163,26 @@ async function waitForImages(root: HTMLElement): Promise<void> {
           };
           img.addEventListener('load', onFinish);
           img.addEventListener('error', onFinish);
-          setTimeout(onFinish, 1500);
+          setTimeout(onFinish, timeoutMs);
         })
     )
   );
+}
+
+/**
+ * Aguarda as fontes web estarem prontas no documento para evitar Flash of Unstyled Text (FOUT) no PDF e na impressão.
+ */
+export async function waitForFonts(targetDoc: Document = document, timeoutMs = 1500): Promise<void> {
+  if ('fonts' in targetDoc && typeof targetDoc.fonts.ready?.then === 'function') {
+    try {
+      await Promise.race([
+        targetDoc.fonts.ready,
+        new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+      ]);
+    } catch {
+      // Degradação graciosa caso a API fonts falhe
+    }
+  }
 }
 
 /**
@@ -100,107 +194,105 @@ function sanitizeClonedDomForHtml2Canvas(
   clonedDoc: Document,
   clonedElement: HTMLElement
 ): void {
-  const { toRgba, replaceModernColorFunctions } = createColorConverter();
+  const converter = createColorConverter();
 
-  // 1. Sanitiza todas as tags <style> no documento clonado para remover oklch/oklab/color-mix
-  const styleTags = Array.from(clonedDoc.querySelectorAll('style'));
-  for (const styleTag of styleTags) {
-    if (styleTag.textContent) {
-      styleTag.textContent = replaceModernColorFunctions(styleTag.textContent);
-    }
-  }
-
-  // 2. Remove elementos marcados com .no-print dentro do clone
-  const noPrintNodes = Array.from(clonedElement.querySelectorAll('.no-print, [data-no-print="true"]'));
-  for (const node of noPrintNodes) {
-    node.remove();
-  }
-
-  // 3. Garante que o container clonado esteja visível e em largura Widescreen Desktop (1280px)
-  clonedElement.style.position = 'static';
-  clonedElement.style.left = '0';
-  clonedElement.style.top = '0';
-  clonedElement.style.opacity = '1';
-  clonedElement.style.visibility = 'visible';
-  clonedElement.style.display = 'block';
-  clonedElement.style.width = '1280px';
-  clonedElement.style.maxWidth = '1280px';
-  clonedElement.style.minWidth = '1280px';
-  clonedElement.style.margin = '0';
-  clonedElement.style.padding = '0';
-  clonedElement.style.overflow = 'visible';
-  clonedElement.style.backgroundColor = '#ffffff';
-  clonedElement.style.borderRadius = '12px';
-
-  // Expande containers de tabela para evitar corte horizontal (overflow-x-auto)
-  const overflowContainers = Array.from(clonedElement.querySelectorAll('.overflow-x-auto, .overflow-hidden'));
-  for (const container of overflowContainers) {
-    if (container instanceof HTMLElement && container.classList.contains('overflow-x-auto')) {
-      container.style.overflowX = 'visible';
-      container.style.overflow = 'visible';
-    }
-  }
-
-  // 4. Aplica cores RGB computadas diretamente nos elementos do clone
-  const origNodes = [originalElement, ...Array.from(originalElement.querySelectorAll('*'))];
-  const cloneNodes = [clonedElement, ...Array.from(clonedElement.querySelectorAll('*'))];
-
-  const colorProps = [
-    'color',
-    'backgroundColor',
-    'borderTopColor',
-    'borderRightColor',
-    'borderBottomColor',
-    'borderLeftColor',
-    'outlineColor',
-    'textDecorationColor',
-  ] as const;
-
-  const limit = Math.min(origNodes.length, cloneNodes.length);
-  for (let i = 0; i < limit; i++) {
-    const origEl = origNodes[i];
-    const cloneEl = cloneNodes[i];
-    if (!(origEl instanceof Element) || !(cloneEl instanceof HTMLElement || cloneEl instanceof SVGElement)) {
-      continue;
-    }
-
-    const computed = window.getComputedStyle(origEl);
-    const style = (cloneEl as HTMLElement).style;
-    if (!style) continue;
-
-    for (const prop of colorProps) {
-      const val = computed[prop];
-      if (val && /(?:oklch|oklab|color-mix|lch|lab|color)\(/i.test(val)) {
-        style[prop] = toRgba(val);
-      } else if (val) {
-        style[prop] = val;
+  try {
+    // 1. Sanitiza todas as tags <style> no documento clonado
+    const styleTags = Array.from(clonedDoc.querySelectorAll('style'));
+    for (const styleTag of styleTags) {
+      if (styleTag.textContent) {
+        styleTag.textContent = converter.replaceModernColorFunctions(styleTag.textContent);
       }
     }
 
-    if (computed.boxShadow && computed.boxShadow !== 'none') {
-      if (/(?:oklch|oklab|color-mix|lch|lab|color)\(/i.test(computed.boxShadow)) {
-        style.boxShadow = replaceModernColorFunctions(computed.boxShadow);
-      }
+    // 2. Remove elementos com .no-print dentro do clone
+    const noPrintNodes = Array.from(clonedElement.querySelectorAll('.no-print, [data-no-print="true"]'));
+    for (const node of noPrintNodes) {
+      node.remove();
     }
-    if (computed.backgroundImage && computed.backgroundImage !== 'none') {
-      if (/(?:oklch|oklab|color-mix|lch|lab|color)\(/i.test(computed.backgroundImage)) {
-        style.backgroundImage = replaceModernColorFunctions(computed.backgroundImage);
-      }
-    }
-  }
 
-  if (clonedDoc.body) {
-    clonedDoc.body.style.backgroundColor = '#ffffff';
-    clonedDoc.body.style.color = '#0f172a';
-  }
-  if (clonedDoc.documentElement) {
-    clonedDoc.documentElement.style.backgroundColor = '#ffffff';
-    clonedDoc.documentElement.style.color = '#0f172a';
+    // 3. Força layout Desktop 1280px estável
+    clonedElement.style.position = 'static';
+    clonedElement.style.left = '0';
+    clonedElement.style.top = '0';
+    clonedElement.style.opacity = '1';
+    clonedElement.style.visibility = 'visible';
+    clonedElement.style.display = 'block';
+    clonedElement.style.width = '1280px';
+    clonedElement.style.maxWidth = '1280px';
+    clonedElement.style.minWidth = '1280px';
+    clonedElement.style.margin = '0';
+    clonedElement.style.padding = '0';
+    clonedElement.style.overflow = 'visible';
+    clonedElement.style.backgroundColor = '#ffffff';
+    clonedElement.style.borderRadius = '12px';
+
+    // Expande containers com scroll horizontal
+    const overflowContainers = Array.from(clonedElement.querySelectorAll('.overflow-x-auto, .overflow-hidden'));
+    for (const container of overflowContainers) {
+      if (container instanceof HTMLElement && container.classList.contains('overflow-x-auto')) {
+        container.style.overflowX = 'visible';
+        container.style.overflow = 'visible';
+      }
+    }
+
+    // 4. Mapeamento seletivo de estilos computados (apenas se contiverem cores modernas)
+    const origNodes = [originalElement, ...Array.from(originalElement.querySelectorAll('*'))];
+    const cloneNodes = [clonedElement, ...Array.from(clonedElement.querySelectorAll('*'))];
+
+    const colorProps = [
+      'color',
+      'backgroundColor',
+      'borderTopColor',
+      'borderRightColor',
+      'borderBottomColor',
+      'borderLeftColor',
+      'outlineColor',
+      'textDecorationColor',
+    ] as const;
+
+    const limit = Math.min(origNodes.length, cloneNodes.length);
+    for (let i = 0; i < limit; i++) {
+      const origEl = origNodes[i];
+      const cloneEl = cloneNodes[i];
+      if (!(origEl instanceof Element) || !(cloneEl instanceof HTMLElement || cloneEl instanceof SVGElement)) {
+        continue;
+      }
+
+      const computed = window.getComputedStyle(origEl);
+      const style = (cloneEl as HTMLElement).style;
+      if (!style) continue;
+
+      for (const prop of colorProps) {
+        const val = computed[prop];
+        if (val && /(?:oklch|oklab|color-mix|lch|lab|color)\(/i.test(val)) {
+          style[prop] = converter.toRgba(val);
+        } else if (val && val.startsWith('rgba(0, 0, 0, 0)')) {
+          // ignora transparent
+        }
+      }
+
+      if (computed.boxShadow && computed.boxShadow !== 'none' && /(?:oklch|oklab|color-mix|lch|lab|color)\(/i.test(computed.boxShadow)) {
+        style.boxShadow = converter.replaceModernColorFunctions(computed.boxShadow);
+      }
+      if (computed.backgroundImage && computed.backgroundImage !== 'none' && /(?:oklch|oklab|color-mix|lch|lab|color)\(/i.test(computed.backgroundImage)) {
+        style.backgroundImage = converter.replaceModernColorFunctions(computed.backgroundImage);
+      }
+    }
+
+    if (clonedDoc.body) {
+      clonedDoc.body.style.backgroundColor = '#ffffff';
+      clonedDoc.body.style.color = '#0f172a';
+    }
+  } finally {
+    converter.dispose();
   }
 }
 
 /**
- * Renderizador programático de alta resolução (Fallback 2D Canvas de Segurança)
+ * Renderizador de contingência em Canvas 2D puro (Fallback Robusto de Alta Resolução).
+ * Ativado caso o DOM contenha elementos não suportados pelo html2canvas.
+ * Respeita estritamente a REGRA FUNDAMENTAL — NÃO INVENTAR DADOS.
  */
 async function renderFallbackExecutiveCanvas(
   disciplines: DisciplineMetric[],
@@ -234,18 +326,20 @@ async function renderFallbackExecutiveCanvas(
   const campusLabel = !hasData
     ? '-- (Base Zerada)'
     : activeSession?.campus
-    ? activeSession.campus.startsWith('Campus')
+    ? activeSession.campus.startsWith('Campus') || activeSession.campus.startsWith('Não informado')
       ? activeSession.campus
       : `Campus ${activeSession.campus}`
     : executive?.campus
-    ? executive.campus.startsWith('Campus')
+    ? executive.campus.startsWith('Campus') || executive.campus.startsWith('Não informado')
       ? executive.campus
       : `Campus ${executive.campus}`
-    : `Campus ${primary?.campus || 'Principal'}`;
+    : primary?.campus
+    ? `Campus ${primary.campus}`
+    : 'Não informado na fonte';
 
   const courseLabel = !hasData
     ? 'CURSO: --'
-    : `CURSO: ${(activeSession?.course || executive?.course || primary?.course || 'CIÊNCIA DA COMPUTAÇÃO').toUpperCase()}`;
+    : `CURSO: ${(activeSession?.course || executive?.course || primary?.course || 'Não informado na fonte').toUpperCase()}`;
 
   const periodText = hasData
     ? executive?.entryYear
@@ -255,7 +349,7 @@ async function renderFallbackExecutiveCanvas(
 
   const fileText = !hasData
     ? 'Base de dados limpa'
-    : `Relatório: ${activeSession?.fileName || primary?.sourceFileOrUrl || 'Arquivo Selecionado'}`;
+    : `Relatório: ${activeSession?.fileName || primary?.sourceFileOrUrl || 'Arquivo Importado'}`;
 
   ctx.fillStyle = '#FFB800';
   ctx.font = '900 34px sans-serif';
@@ -292,7 +386,7 @@ async function renderFallbackExecutiveCanvas(
   drawCard(36, heroY, heroW, heroH);
   drawCard(36 + heroW + 24, heroY, heroW, heroH);
 
-  const studyDisplay = !hasData ? '00:00' : executive?.studyTimeFormatted || '18:56';
+  const studyDisplay = !hasData ? '00:00' : executive?.studyTimeFormatted || 'Não informado';
   ctx.fillStyle = '#334155';
   ctx.font = '900 14px sans-serif';
   ctx.fillText('TEMPO DE ESTUDO', 64, heroY + 42);
@@ -318,7 +412,7 @@ async function renderFallbackExecutiveCanvas(
     ? '0,00 %'
     : executive
     ? `${executive.attendanceRate.toFixed(2).replace('.', ',')} %`
-    : '85,78 %';
+    : 'Não informado';
   const card2X = 36 + heroW + 24;
   ctx.fillStyle = '#334155';
   ctx.font = '900 14px sans-serif';
@@ -351,26 +445,26 @@ async function renderFallbackExecutiveCanvas(
   const govItems = [
     {
       label: 'Grau de Aprendizagem',
-      val: !hasData ? '0,00%' : `${(executive?.learningScore ?? 57.03).toFixed(2).replace('.', ',')}%`,
-      sub: hasData && executive ? `Meta: ${executive.learningScoreTarget.toFixed(2).replace('.', ',')}%` : 'Meta: 0,00%',
+      val: !hasData ? '0,00%' : executive ? `${executive.learningScore.toFixed(2).replace('.', ',')}%` : 'Não informado',
+      sub: hasData && executive ? `Meta: ${executive.learningScoreTarget.toFixed(2).replace('.', ',')}%` : 'Meta: --',
       color: '#1E293B',
     },
     {
       label: 'Reprovação Geral',
-      val: !hasData ? '0,00%' : `${(executive?.failureRate ?? 9.09).toFixed(2).replace('.', ',')}%`,
-      sub: hasData && executive ? `Meta: ${executive.failureRateTarget.toFixed(2).replace('.', ',')}%` : 'Meta: 0,00%',
+      val: !hasData ? '0,00%' : executive ? `${executive.failureRate.toFixed(2).replace('.', ',')}%` : 'Não informado',
+      sub: hasData && executive ? `Meta: ${executive.failureRateTarget.toFixed(2).replace('.', ',')}%` : 'Meta: --',
       color: '#1E293B',
     },
     {
       label: 'Adesão AV',
-      val: !hasData ? '0,00%' : `${(executive?.adhesionAV ?? 81.11).toFixed(2).replace('.', ',')}%`,
-      sub: hasData && executive ? `Meta: ${executive.adhesionAVTarget.toFixed(2).replace('.', ',')}%` : 'Meta: 0,00%',
+      val: !hasData ? '0,00%' : executive ? `${executive.adhesionAV.toFixed(2).replace('.', ',')}%` : 'Não informado',
+      sub: hasData && executive ? `Meta: ${executive.adhesionAVTarget.toFixed(2).replace('.', ',')}%` : 'Meta: --',
       color: '#1E293B',
     },
     {
       label: 'Adesão SM',
-      val: !hasData ? '0,00%' : `${(executive?.adhesionSM ?? 65.71).toFixed(2).replace('.', ',')}%`,
-      sub: hasData && executive ? `Meta: ${executive.adhesionSMTarget.toFixed(2).replace('.', ',')}%` : 'Meta: 0,00%',
+      val: !hasData ? '0,00%' : executive ? `${executive.adhesionSM.toFixed(2).replace('.', ',')}%` : 'Não informado',
+      sub: hasData && executive ? `Meta: ${executive.adhesionSMTarget.toFixed(2).replace('.', ',')}%` : 'Meta: --',
       color: '#1E293B',
     },
     {
@@ -497,9 +591,31 @@ async function renderFallbackExecutiveCanvas(
 }
 
 /**
+ * Faz download de um Blob com desalocação de memória determinística (Memory-Safe Download).
+ * Cria a URL temporária, dispara o clique simulado e revoga o ObjectURL para evitar memory leaks.
+ */
+export function downloadBlobWithCleanup(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = sanitizePdfFileName(fileName);
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+
+  try {
+    anchor.click();
+  } finally {
+    anchor.remove();
+    // Revoga a URL imediatamente após o microciclo do clique
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 1500);
+  }
+}
+
+/**
  * Tenta abrir a janela nativa do Sistema Operacional "Salvar como..." (File System Access API)
  * para o usuário escolher a pasta e o nome do arquivo PDF.
- * Deve ser chamada sincronicamente dentro do evento de clique do usuário.
  */
 export async function promptSystemSavePdfFileHandle(suggestedFileName: string): Promise<{
   handle: any | null;
@@ -513,7 +629,7 @@ export async function promptSystemSavePdfFileHandle(suggestedFileName: string): 
 
   try {
     const handle = await win.showSaveFilePicker({
-      suggestedName: suggestedFileName.endsWith('.pdf') ? suggestedFileName : `${suggestedFileName}.pdf`,
+      suggestedName: sanitizePdfFileName(suggestedFileName),
       types: [
         {
           description: 'Documento PDF (*.pdf)',
@@ -526,18 +642,17 @@ export async function promptSystemSavePdfFileHandle(suggestedFileName: string): 
     if (err?.name === 'AbortError') {
       return { handle: null, cancelled: true, supported: true };
     }
-    // SecurityError quando executado dentro de um iframe cross-origin
+    // SecurityError quando executado em iframe restrito
     return { handle: null, cancelled: false, supported: false };
   }
 }
 
 /**
- * Captura o container do layout do 'Dashboard Executivo' (#print-executive-report)
- * e gera um arquivo PDF de alta resolução (landscape / A4), gravando no local escolhido
- * pelo usuário (via FileSystemFileHandle ou download no navegador).
+ * Rotina Principal: Exporta o Dashboard Executivo para PDF de alta fidelidade vetorial/raster
+ * com ciclo assíncrono não-bloqueante, callbacks de progresso e liberação defensiva de memória.
  */
 export async function exportExecutiveDashboardToPdf(
-  elementId = 'print-executive-report',
+  elementIdOrOptions: string | ExportPdfOptions = 'print-executive-report',
   customFileName?: string,
   fallbackContext?: {
     disciplines: DisciplineMetric[];
@@ -545,16 +660,59 @@ export async function exportExecutiveDashboardToPdf(
     config?: SystemConfig;
   },
   fileHandle?: any
-): Promise<{ fileName: string; savedViaSystemPicker: boolean }> {
+): Promise<ExportPdfResult> {
+  const options: ExportPdfOptions =
+    typeof elementIdOrOptions === 'string'
+      ? {
+          elementId: elementIdOrOptions,
+          customFileName,
+          fallbackContext,
+          fileHandle,
+        }
+      : elementIdOrOptions;
+
+  const elementId = options.elementId || 'print-executive-report';
+  const scale = options.scale ?? (window.devicePixelRatio && window.devicePixelRatio > 1 ? 2 : 2);
+  const onProgress = options.onProgress;
+  const signal = options.signal;
+
+  const updateProgress = (stage: ExportStage, percent: number, message: string) => {
+    if (onProgress) {
+      onProgress({ stage, percent, message });
+    }
+  };
+
+  const checkAborted = () => {
+    if (signal?.aborted) {
+      updateProgress('cancelled', 0, 'Exportação cancelada pelo usuário.');
+      throw new DOMException('Operação de exportação cancelada.', 'AbortError');
+    }
+  };
+
+  // Fase 1: Preparação do DOM e Fontes
+  updateProgress('preparing', 10, 'Preparando layout e verificando fontes tipográficas...');
+  await yieldToMainThread();
+  checkAborted();
+
+  await waitForFonts(document, 1200);
+  checkAborted();
+
   const element = document.getElementById(elementId);
-  let canvas: HTMLCanvasElement;
+  let canvas: HTMLCanvasElement | null = null;
+  let usedFallback = false;
+
+  // Fase 2: Captura de Alta Definição
+  updateProgress('capturing', 30, 'Capturando painel em alta definição widescreen 16:9...');
+  await yieldToMainThread();
+  checkAborted();
 
   if (element) {
     try {
-      await waitForImages(element);
+      await waitForImages(element, 2000);
+      checkAborted();
 
       canvas = await html2canvas(element, {
-        scale: 2,
+        scale,
         useCORS: true,
         allowTaint: false,
         logging: false,
@@ -566,30 +724,43 @@ export async function exportExecutiveDashboardToPdf(
         },
       });
     } catch (captureErr) {
-      console.warn('Fallback de renderização Canvas ativado para exportação PDF:', captureErr);
-      if (fallbackContext) {
+      console.warn('Fallback Canvas 2D ativado para geração do relatório PDF:', captureErr);
+      usedFallback = true;
+      if (options.fallbackContext) {
         canvas = await renderFallbackExecutiveCanvas(
-          fallbackContext.disciplines,
-          fallbackContext.activeSession,
-          fallbackContext.config
+          options.fallbackContext.disciplines,
+          options.fallbackContext.activeSession,
+          options.fallbackContext.config
         );
       } else {
         throw captureErr;
       }
     }
-  } else if (fallbackContext) {
+  } else if (options.fallbackContext) {
+    usedFallback = true;
     canvas = await renderFallbackExecutiveCanvas(
-      fallbackContext.disciplines,
-      fallbackContext.activeSession,
-      fallbackContext.config
+      options.fallbackContext.disciplines,
+      options.fallbackContext.activeSession,
+      options.fallbackContext.config
     );
   } else {
-    throw new Error(`Elemento com id '${elementId}' não foi localizado no documento.`);
+    throw new Error(`Elemento com identificador '#${elementId}' não foi localizado no documento.`);
+  }
+
+  checkAborted();
+
+  // Fase 3: Compilação do Documento PDF
+  updateProgress('compiling', 65, 'Compilando documento PDF no padrão A4 Paisagem...');
+  await yieldToMainThread();
+  checkAborted();
+
+  if (!canvas) {
+    throw new Error('Falha ao instanciar o buffer de renderização gráfica.');
   }
 
   const imgData = canvas.toDataURL('image/png', 1.0);
 
-  // Inicializa o documento PDF em formato A4 Paisagem (297mm x 210mm)
+  // Inicializa o jsPDF em A4 Paisagem (297mm x 210mm)
   const pdf = new jsPDF({
     orientation: 'landscape',
     unit: 'mm',
@@ -599,7 +770,6 @@ export async function exportExecutiveDashboardToPdf(
 
   const pageWidth = pdf.internal.pageSize.getWidth();   // 297 mm
   const pageHeight = pdf.internal.pageSize.getHeight(); // 210 mm
-
   const margin = 5;
   const usableWidth = pageWidth - margin * 2;
   const usableHeight = pageHeight - margin * 2;
@@ -618,27 +788,61 @@ export async function exportExecutiveDashboardToPdf(
 
   pdf.addImage(imgData, 'PNG', xOffset, yOffset, finalWidth, finalHeight, undefined, 'FAST');
 
-  const rawName =
-    customFileName || `Relatorio_Executivo_Pulso_Academico_${new Date().toISOString().slice(0, 10)}.pdf`;
-  const finalFileName = rawName.endsWith('.pdf') ? rawName : `${rawName}.pdf`;
+  // Metadados do PDF para governança
+  pdf.setProperties({
+    title: 'Relatório Executivo — Pulso Acadêmico',
+    subject: 'Dashboard Executivo de Governança Acadêmica',
+    author: 'Sistema Pulso Acadêmico YDUQS',
+    keywords: 'Pulso Acadêmico, Governança, LHI, ARS, Indicadores',
+    creator: 'Pulso Acadêmico Engine v2.0',
+  });
 
-  // Se o usuário escolheu um local via File System Access API (showSaveFilePicker), grava diretamente no arquivo
-  if (fileHandle && typeof fileHandle.createWritable === 'function') {
-    const pdfBlob = pdf.output('blob');
-    const writable = await fileHandle.createWritable();
-    await writable.write(pdfBlob);
-    await writable.close();
-    return {
-      fileName: fileHandle.name || finalFileName,
-      savedViaSystemPicker: true,
-    };
+  // Limpeza defensiva de memória do Canvas
+  canvas.width = 1;
+  canvas.height = 1;
+
+  // Fase 4: Gravação e Download do Arquivo
+  updateProgress('saving', 85, 'Finalizando gravação do arquivo e transmitindo ao usuário...');
+  await yieldToMainThread();
+  checkAborted();
+
+  const rawName =
+    options.customFileName || `Relatorio_Executivo_Pulso_Academico_${new Date().toISOString().slice(0, 10)}.pdf`;
+  const finalFileName = sanitizePdfFileName(rawName);
+
+  const pdfBlob = pdf.output('blob');
+  const byteSize = pdfBlob.size;
+
+  // Se houver fileHandle compatível com File System Access API
+  if (options.fileHandle && typeof options.fileHandle.createWritable === 'function') {
+    try {
+      const writable = await options.fileHandle.createWritable();
+      await writable.write(pdfBlob);
+      await writable.close();
+
+      updateProgress('completed', 100, `Arquivo PDF salvo com sucesso em seu dispositivo (${(byteSize / 1024).toFixed(1)} KB).`);
+
+      return {
+        fileName: options.fileHandle.name || finalFileName,
+        savedViaSystemPicker: true,
+        byteSize,
+        pageCount: 1,
+      };
+    } catch (saveErr) {
+      console.warn('Erro ao gravar via FileHandle, aplicando download direto de segurança:', saveErr);
+    }
   }
 
-  // Fallback padrão: baixa o Blob com o nome e caminho definidos
-  pdf.save(finalFileName);
+  // Fallback padrão: download com limpeza de ObjectURL
+  downloadBlobWithCleanup(pdfBlob, finalFileName);
+
+  updateProgress('completed', 100, `Arquivo PDF gerado com sucesso (${(byteSize / 1024).toFixed(1)} KB).`);
+
   return {
     fileName: finalFileName,
     savedViaSystemPicker: false,
+    byteSize,
+    pageCount: 1,
   };
 }
 
@@ -652,8 +856,9 @@ export interface PrintOptionsConfig {
 }
 
 /**
- * Executa a rotina dedicada de impressão do Relatório Executivo ("Imprimir Relatório")
- * abrindo a opção de escolha da impressora do sistema operacional para o documento isolado.
+ * Rotina Otimizada de Impressão Direta e Visualização (Direct / Spool Print).
+ * Utiliza um iframe isolado com carregamento de estilos, sincronização de fontes
+ * e ciclo de vida assíncrono para garantir que nenhum elemento da interface externa apareça no papel.
  */
 export async function printExecutiveDashboardReport(
   elementId = 'print-executive-report',
@@ -671,27 +876,26 @@ export async function printExecutiveDashboardReport(
   const colorFilter = options.colorMode === 'grayscale' ? 'grayscale(100%)' : 'none';
   const zoomLevel = options.scaleFit !== false ? (orientation === 'landscape' ? '0.82' : '0.58') : '1';
 
+  // Garante que não haja iframe anterior pendente
+  const existingIframe = document.getElementById('pulso-executive-print-iframe');
+  if (existingIframe) {
+    existingIframe.remove();
+  }
+
+  const iframe = document.createElement('iframe');
+  iframe.id = 'pulso-executive-print-iframe';
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '1280px';
+  iframe.style.height = '900px';
+  iframe.style.opacity = '0';
+  iframe.style.pointerEvents = 'none';
+  iframe.style.zIndex = '-9999';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+
   try {
-    await waitForImages(sourceElement);
-
-    const existingIframe = document.getElementById('pulso-executive-print-iframe');
-    if (existingIframe) {
-      existingIframe.remove();
-    }
-
-    const iframe = document.createElement('iframe');
-    iframe.id = 'pulso-executive-print-iframe';
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '1280px';
-    iframe.style.height = '900px';
-    iframe.style.opacity = '0';
-    iframe.style.pointerEvents = 'none';
-    iframe.style.zIndex = '-9999';
-    iframe.style.border = '0';
-    document.body.appendChild(iframe);
-
     const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
     const iframeWin = iframe.contentWindow;
 
@@ -701,6 +905,7 @@ export async function printExecutiveDashboardReport(
       return;
     }
 
+    // Coleta todas as folhas de estilo ativas no documento pai
     const stylesHtml = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
       .map((node) => node.outerHTML)
       .join('\n');
@@ -745,6 +950,10 @@ export async function printExecutiveDashboardReport(
       .overflow-x-auto {
         overflow: visible !important;
       }
+      .break-inside-avoid, tr {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+      }
     }
   </style>
 </head>
@@ -756,17 +965,42 @@ export async function printExecutiveDashboardReport(
 </html>`);
     iframeDoc.close();
 
-    await waitForImages(iframeDoc.body);
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    // Aguarda imagens e fontes dentro do iframe
+    await Promise.all([
+      waitForImages(iframeDoc.body, 2000),
+      waitForFonts(iframeDoc, 1500),
+    ]);
 
+    // Respiro mínimo para o layout engine do browser calcular as dimensões
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // Executa impressão segura
     iframeWin.focus();
+
+    // Configura remoção segura após impressão (ou após timeout se o usuário demorar na janela)
+    const cleanup = () => {
+      try {
+        iframe.remove();
+      } catch {
+        // Ignora caso já tenha sido removido
+      }
+    };
+
+    if ('onafterprint' in iframeWin) {
+      iframeWin.onafterprint = cleanup;
+    }
+
     iframeWin.print();
 
-    setTimeout(() => {
-      iframe.remove();
-    }, 4000);
+    // Timer de garantia para evitar orfandade do nó iframe no DOM
+    setTimeout(cleanup, 10000);
   } catch (err) {
-    console.warn('Fallback para window.print() padrão:', err);
+    console.warn('Fallback para window.print() em caso de exceção no iframe:', err);
+    try {
+      iframe.remove();
+    } catch {
+      // Ignora erro de remoção
+    }
     window.print();
   }
 }

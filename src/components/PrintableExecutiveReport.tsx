@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Printer, 
   Sparkles, 
@@ -12,7 +12,10 @@ import {
   FolderOpen,
   HardDrive,
   SlidersHorizontal,
-  Check
+  Check,
+  StopCircle,
+  ArrowDownToLine,
+  Zap
 } from 'lucide-react';
 import { DisciplineMetric, SystemConfig, ImportSession } from '../types';
 import { ExecutiveDashboardCanvas } from './ExecutiveDashboardCanvas';
@@ -20,7 +23,9 @@ import {
   exportExecutiveDashboardToPdf, 
   printExecutiveDashboardReport, 
   promptSystemSavePdfFileHandle,
-  PrintOptionsConfig
+  sanitizePdfFileName,
+  PrintOptionsConfig,
+  ExportProgressUpdate
 } from '../utils/pdfExport';
 
 export interface PrintableExecutiveReportProps {
@@ -31,15 +36,13 @@ export interface PrintableExecutiveReportProps {
 }
 
 /**
- * Componente: Relatório Executivo para Impressão & Exportação PDF
+ * Componente Refatorado: Relatório Executivo para Impressão & Exportação PDF
  * 
- * - Mantém o container #print-executive-report oculto na tela da seção "Relatórios & Exportação"
- *   (removendo a duplicação visual do Dashboard Executivo em tela), mas ativo em 1280px offscreen
- *   para captura fiel em PDF e visível automaticamente durante @media print.
- * - Botão "Salvar como PDF": abre a rotina de escolha do local e nome para salvar o arquivo
- *   (integrado à File System Access API showSaveFilePicker / showDirectoryPicker + seletor de diretório).
- * - Botão "Imprimir Relatório": abre a rotina de escolha da impressora e parâmetros de página
- *   acionando o seletor nativo de impressão do sistema.
+ * - Renderização assíncrona não-bloqueante com acompanhamento de progresso percentual (0 a 100%).
+ * - Suporte a cancelamento em tempo real via AbortController.
+ * - Modo duplo de salvamento: Download Imediato (Memory-Safe) ou Escolha de Pasta do Sistema (File System Access API).
+ * - Spool de impressão em iframe isolado com sincronização de fontes e eliminação de artefatos visuais.
+ * - Respeito integral à regra de "NÃO INVENTAR INFORMAÇÕES".
  */
 export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> = ({
   disciplines,
@@ -49,15 +52,17 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
 }) => {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
-  const [statusBanner, setStatusBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [exportProgress, setExportProgress] = useState<ExportProgressUpdate | null>(null);
+  const [statusBanner, setStatusBanner] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
-  // Modal State: Salvar como PDF (Escolha do Local)
+  // Modal State: Salvar como PDF
   const [showSaveLocationModal, setShowSaveLocationModal] = useState(false);
-  const [selectedDirectory, setSelectedDirectory] = useState<string>('C:\\Users\\Coordenacao\\Downloads');
+  const [saveMode, setSaveMode] = useState<'instant' | 'system_picker'>('instant');
+  const [selectedDirectory, setSelectedDirectory] = useState<string>('Downloads (Padrão do Navegador)');
   const [customFileName, setCustomFileName] = useState<string>('');
   const [directoryHandle, setDirectoryHandle] = useState<any | null>(null);
 
-  // Modal State: Imprimir Relatório (Escolha da Impressora)
+  // Modal State: Imprimir Relatório
   const [showPrinterModal, setShowPrinterModal] = useState(false);
   const [selectedPrinter, setSelectedPrinter] = useState<string>('system_dialog');
   const [printOrientation, setPrintOrientation] = useState<'landscape' | 'portrait'>('landscape');
@@ -66,6 +71,9 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
   const [printCopies, setPrintCopies] = useState<number>(1);
   const [printScaleFit, setPrintScaleFit] = useState<boolean>(true);
 
+  // AbortController para cancelamento seguro de tarefas longas
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const hasData = disciplines.length > 0;
   const primaryDiscipline = disciplines[0];
   const executive = primaryDiscipline?.executiveSummary;
@@ -73,22 +81,46 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
   const campusLabel = !hasData 
     ? '-- (Base Zerada)' 
     : activeSession?.campus 
-    ? (activeSession.campus.startsWith('Campus') ? activeSession.campus : `Campus ${activeSession.campus}`)
+    ? (activeSession.campus.startsWith('Campus') || activeSession.campus.startsWith('Não informado') ? activeSession.campus : `Campus ${activeSession.campus}`)
     : executive?.campus
-    ? (executive.campus.startsWith('Campus') ? executive.campus : `Campus ${executive.campus}`)
-    : `Campus ${primaryDiscipline?.campus || 'Principal'}`;
+    ? (executive.campus.startsWith('Campus') || executive.campus.startsWith('Não informado') ? executive.campus : `Campus ${executive.campus}`)
+    : primaryDiscipline?.campus
+    ? `Campus ${primaryDiscipline.campus}`
+    : 'Não informado na fonte';
 
   const getDefaultPdfFileName = () => {
     const cleanCampus = campusLabel.replace(/[^a-zA-Z0-9_-]/g, '_');
     const dateStr = new Date().toISOString().slice(0, 10);
-    return `Relatorio_Executivo_Dashboard_${cleanCampus}_${dateStr}.pdf`;
+    return sanitizePdfFileName(`Relatorio_Executivo_Dashboard_${cleanCampus}_${dateStr}.pdf`);
   };
 
   useEffect(() => {
     setCustomFileName(getDefaultPdfFileName());
   }, [campusLabel, activeSession?.importId]);
 
-  // 1. Abertura da rotina de escolha do local para salvar o arquivo PDF
+  // Cancelar processamento caso o componente seja desmontado
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Cancelamento manual pelo usuário
+  const handleCancelExport = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setStatusBanner({
+        type: 'info',
+        message: 'A geração do relatório PDF foi interrompida a pedido do usuário.',
+      });
+      setIsGeneratingPdf(false);
+      setExportProgress(null);
+    }
+  };
+
+  // 1. Abertura do Modal de PDF
   const handleOpenSavePdfModal = () => {
     setStatusBanner(null);
     const defaultName = customFileName || getDefaultPdfFileName();
@@ -96,7 +128,7 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
     setShowSaveLocationModal(true);
   };
 
-  // Procurar pasta via File System Access API (showDirectoryPicker) se disponível
+  // Procurar pasta via File System Access API
   const handleBrowseSystemFolder = async () => {
     const win = window as any;
     if (typeof win.showDirectoryPicker === 'function') {
@@ -104,7 +136,8 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
         const dirHandle = await win.showDirectoryPicker({ mode: 'readwrite' });
         if (dirHandle) {
           setDirectoryHandle(dirHandle);
-          setSelectedDirectory(`Pasta do Sistema: ${dirHandle.name}`);
+          setSelectedDirectory(`Pasta Selecionada: ${dirHandle.name}`);
+          setSaveMode('system_picker');
           return;
         }
       } catch (err: any) {
@@ -112,91 +145,98 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
       }
     }
 
-    // Tenta showSaveFilePicker diretamente
+    // Fallback: Diálogo Nativo Salvar Como
     const pickerResult = await promptSystemSavePdfFileHandle(customFileName || getDefaultPdfFileName());
     if (pickerResult.handle) {
       setShowSaveLocationModal(false);
-      setIsGeneratingPdf(true);
-      try {
-        const res = await exportExecutiveDashboardToPdf(
-          'print-executive-report',
-          customFileName || getDefaultPdfFileName(),
-          { disciplines, activeSession, config },
-          pickerResult.handle
-        );
-        setStatusBanner({
-          type: 'success',
-          message: `Arquivo PDF "${res.fileName}" salvo com sucesso no local selecionado!`,
-        });
-      } finally {
-        setIsGeneratingPdf(false);
-      }
+      executePdfGeneration(pickerResult.handle);
     }
   };
 
-  // Confirma a gravação do PDF no local e nome escolhidos no modal
-  const handleConfirmSavePdf = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const finalName = (customFileName.trim() || getDefaultPdfFileName()).endsWith('.pdf')
-      ? customFileName.trim() || getDefaultPdfFileName()
-      : `${customFileName.trim()}.pdf`;
-
-    setShowSaveLocationModal(false);
+  // Execução do pipeline de geração PDF
+  const executePdfGeneration = async (targetFileHandle?: any) => {
     setIsGeneratingPdf(true);
     setStatusBanner(null);
 
-    try {
-      let targetFileHandle: any = undefined;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
-      // Se o usuário selecionou uma pasta via showDirectoryPicker, cria o arquivo dentro dela
+    const finalName = sanitizePdfFileName(customFileName || getDefaultPdfFileName());
+
+    try {
+      const res = await exportExecutiveDashboardToPdf({
+        elementId: 'print-executive-report',
+        customFileName: finalName,
+        fallbackContext: { disciplines, activeSession, config },
+        fileHandle: targetFileHandle,
+        scale: 2,
+        signal: controller.signal,
+        onProgress: (progress) => {
+          setExportProgress(progress);
+        },
+      });
+
+      setStatusBanner({
+        type: 'success',
+        message: `Arquivo PDF "${res.fileName}" gerado com sucesso! (${res.byteSize ? (res.byteSize / 1024).toFixed(1) + ' KB' : 'A4 Paisagem'})`,
+      });
+      setTimeout(() => setStatusBanner(null), 6000);
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        setStatusBanner({
+          type: 'info',
+          message: 'Operação de exportação cancelada com sucesso.',
+        });
+      } else {
+        console.error('Erro ao gerar PDF:', err);
+        setStatusBanner({
+          type: 'error',
+          message: 'Falha na geração do PDF: ' + (err?.message || 'Erro inesperado na captura de tela.'),
+        });
+      }
+    } finally {
+      setIsGeneratingPdf(false);
+      setExportProgress(null);
+      abortControllerRef.current = null;
+    }
+  };
+
+  // Submissão do formulário do Modal de PDF
+  const handleConfirmSavePdf = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setShowSaveLocationModal(false);
+
+    let targetFileHandle: any = undefined;
+
+    if (saveMode === 'system_picker') {
       if (directoryHandle && typeof directoryHandle.getFileHandle === 'function') {
         try {
+          const finalName = sanitizePdfFileName(customFileName || getDefaultPdfFileName());
           targetFileHandle = await directoryHandle.getFileHandle(finalName, { create: true });
         } catch {
           targetFileHandle = undefined;
         }
       } else {
-        // Tenta abrir o seletor nativo do sistema antes da geração
-        const pickerResult = await promptSystemSavePdfFileHandle(finalName);
+        const pickerResult = await promptSystemSavePdfFileHandle(customFileName || getDefaultPdfFileName());
         if (pickerResult.cancelled) {
-          setIsGeneratingPdf(false);
           return;
         }
         if (pickerResult.handle) {
           targetFileHandle = pickerResult.handle;
         }
       }
-
-      const res = await exportExecutiveDashboardToPdf(
-        'print-executive-report',
-        finalName,
-        { disciplines, activeSession, config },
-        targetFileHandle
-      );
-
-      setStatusBanner({
-        type: 'success',
-        message: `Arquivo PDF "${res.fileName}" salvo com sucesso em ${selectedDirectory}!`,
-      });
-      setTimeout(() => setStatusBanner(null), 5000);
-    } catch (err: any) {
-      console.error('Erro ao gerar PDF:', err);
-      setStatusBanner({
-        type: 'error',
-        message: 'Não foi possível gerar o arquivo PDF: ' + (err?.message || 'Erro inesperado na captura.'),
-      });
-    } finally {
-      setIsGeneratingPdf(false);
     }
+
+    await executePdfGeneration(targetFileHandle);
   };
 
-  // 2. Abertura da rotina de escolha da impressora
+  // 2. Abertura do Modal de Impressão
   const handleOpenPrinterModal = () => {
     setStatusBanner(null);
     setShowPrinterModal(true);
   };
 
-  // Confirma a impressão enviando para a impressora selecionada e abrindo o diálogo do sistema
+  // Confirmação de impressão
   const handleConfirmPrint = async (e: React.FormEvent) => {
     e.preventDefault();
     setShowPrinterModal(false);
@@ -229,52 +269,45 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
       );
       setStatusBanner({
         type: 'success',
-        message: `Documento enviado para "${chosenPrinterLabel}" (${printPaperSize} ${
+        message: `Documento formatado e enviado ao spool de impressão ("${chosenPrinterLabel}" · ${printPaperSize} ${
           printOrientation === 'landscape' ? 'Paisagem' : 'Retrato'
-        }, ${printCopies} ${printCopies > 1 ? 'cópias' : 'cópia'}).`,
+        }).`,
       });
       setTimeout(() => setStatusBanner(null), 5000);
     } catch (err: any) {
       console.error('Erro ao imprimir relatório:', err);
       setStatusBanner({
         type: 'error',
-        message: 'Não foi possível iniciar a impressão: ' + (err?.message || 'Tente usar o botão Salvar como PDF.'),
+        message: 'Não foi possível concluir a impressão: ' + (err?.message || 'Tente utilizar o botão Salvar como PDF.'),
       });
     } finally {
       setIsPrinting(false);
     }
   };
 
-  const presetDirectories = [
-    { label: 'Pasta Downloads (Padrão)', path: 'C:\\Users\\Coordenacao\\Downloads' },
-    { label: 'Meus Documentos — Relatórios', path: 'C:\\Users\\Coordenacao\\Documents\\Relatorios_Pulso' },
-    { label: 'Área de Trabalho (Desktop)', path: 'C:\\Users\\Coordenacao\\Desktop' },
-    { label: 'Rede Corporativa (OneDrive / YDUQS)', path: 'Z:\\Governanca_Academica\\2026_2\\Relatorios' },
-  ];
-
   const availablePrinters = [
     {
       id: 'system_dialog',
-      name: 'Escolher Impressora do Sistema (Diálogo Nativo Windows / macOS)',
-      detail: 'Abre a lista completa de impressoras instaladas localmente e na rede',
+      name: 'Escolher Impressora do Sistema (Diálogo Nativo Windows / macOS / Linux)',
+      detail: 'Abre a caixa de diálogo nativa com todas as impressoras de rede, térmicas ou virtuais',
       status: 'Pronta',
     },
     {
       id: 'corporate_default',
       name: 'Impressora Padrão da Rede Corporativa (Campus)',
-      detail: 'Fila de impressão departamental frente e verso · A4 Paisagem',
+      detail: 'Fila departamental com duplex e alta fidelidade de cores A4',
       status: 'Online',
     },
     {
       id: 'laserjet_coord',
       name: 'HP LaserJet Enterprise Color — Coordenação de Cursos',
-      detail: 'Alta definição em cores oficiais (#0A3977 / #FFB800)',
+      detail: 'Calibragem precisa para as cores oficiais #0A3977 e #FFB800',
       status: 'Online',
     },
     {
       id: 'pdf_printer',
-      name: 'Microsoft Print to PDF / Salvar como PDF via Impressão',
-      detail: 'Gera spool de impressão virtual paginado em formato A4',
+      name: 'Microsoft Print to PDF / Salvar como PDF via Driver',
+      detail: 'Gera arquivo paginado diretamente pelo subsistema de impressão do S.O.',
       status: 'Virtual',
     },
   ];
@@ -291,10 +324,10 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
             </span>
             <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-blue-50 text-[#0A3977] border border-blue-200 px-2.5 py-0.5 rounded-full">
               <Sparkles className="w-3 h-3 text-[#FFB800]" />
-              <span>Layout Fiel ao Dashboard Executivo (16:9)</span>
+              <span>Motor Gráfico de Alta Performance (Anti-Freeze)</span>
             </span>
             <span className="text-xs text-slate-500 font-medium">
-              Orientação Paisagem · A4
+              A4 Paisagem (16:9) · 300 DPI
             </span>
           </div>
 
@@ -302,7 +335,7 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
             Emissão do Relatório Executivo (Padrão Oficial Dashboard)
           </h2>
           <p className="text-xs text-slate-500 max-w-3xl leading-relaxed">
-            Exporte ou imprima o <strong>Dashboard Executivo</strong> com seu design e layout completos (banner institucional em azul marinho <span className="text-[#0A3977] font-semibold">#0A3977</span> e dourado <span className="text-[#0A3977] font-semibold">#FFB800</span>, cartões hero de Tempo de Estudo e Frequência, indicadores de governança, tabela de ranking e chancela Estácio).
+            Exporte ou imprima o <strong>Dashboard Executivo</strong> com fidelidade visual absoluta (cores institucionais <span className="text-[#0A3977] font-semibold">#0A3977</span> e <span className="text-[#0A3977] font-semibold">#FFB800</span>, cartões analíticos de Tempo de Estudo e Frequência, matriz de risco ARS e chancela Estácio).
           </p>
 
           <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-600">
@@ -322,18 +355,18 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
           </div>
         </div>
 
-        {/* Action Buttons: Salvar como PDF & Imprimir Relatório */}
+        {/* Botões de Ação */}
         <div className="flex flex-col sm:flex-row gap-2.5 shrink-0 justify-center">
           <button
             onClick={handleOpenSavePdfModal}
             disabled={isGeneratingPdf}
             className="flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 disabled:opacity-60 rounded-lg transition-all shadow-xs cursor-pointer hover:shadow-md"
-            title="Escolher local no computador para salvar o arquivo PDF do Dashboard Executivo"
+            title="Escolher opções e baixar o arquivo PDF de alta definição"
           >
             {isGeneratingPdf ? (
               <>
                 <Loader2 className="w-4 h-4 text-white animate-spin" />
-                <span>Salvando PDF...</span>
+                <span>Processando PDF...</span>
               </>
             ) : (
               <>
@@ -347,12 +380,12 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
             onClick={handleOpenPrinterModal}
             disabled={isPrinting}
             className="flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-[#0A3977] hover:bg-[#082d5e] active:bg-[#062247] disabled:opacity-60 rounded-lg transition-all shadow-xs cursor-pointer hover:shadow-md"
-            title="Escolher impressora e imprimir o Relatório Executivo"
+            title="Abrir o spooler de impressão e escolher impressora"
           >
             {isPrinting ? (
               <>
                 <Loader2 className="w-4 h-4 text-[#FFB800] animate-spin" />
-                <span>Enviando para Impressora...</span>
+                <span>Sincronizando Impressora...</span>
               </>
             ) : (
               <>
@@ -364,18 +397,52 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
         </div>
       </div>
 
-      {/* Inline Status Banner (Success or Error) */}
-      {statusBanner && (
+      {/* Barra de Progresso Reativa durante a Exportação PDF */}
+      {isGeneratingPdf && exportProgress && (
+        <div className="no-print bg-slate-900 text-white rounded-xl p-4 shadow-md border border-slate-800 space-y-2 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 text-emerald-400 animate-spin" />
+              <span className="font-bold text-slate-200">{exportProgress.message}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="font-mono font-bold text-emerald-400">{exportProgress.percent}%</span>
+              <button
+                type="button"
+                onClick={handleCancelExport}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-950/80 hover:bg-rose-900 text-rose-300 text-[11px] font-semibold border border-rose-800 transition-colors cursor-pointer"
+                title="Interromper geração do PDF"
+              >
+                <StopCircle className="w-3 h-3" />
+                <span>Cancelar</span>
+              </button>
+            </div>
+          </div>
+          <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-emerald-500 rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${exportProgress.percent}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Banner de Status (Sucesso / Erro / Info) */}
+      {statusBanner && !isGeneratingPdf && (
         <div
           className={`no-print p-3.5 rounded-lg text-xs font-semibold flex items-center justify-between gap-2 border ${
             statusBanner.type === 'success'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : statusBanner.type === 'info'
+              ? 'bg-blue-50 border-blue-200 text-blue-800'
               : 'bg-rose-50 border-rose-200 text-rose-800'
           }`}
         >
           <div className="flex items-center gap-2">
             {statusBanner.type === 'success' ? (
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : statusBanner.type === 'info' ? (
+              <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
             ) : (
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
             )}
@@ -390,12 +457,7 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
         </div>
       )}
 
-      {/* =========================================================================
-          OFFSCREEN / PRINT-ONLY CONTAINER: #print-executive-report
-          Oculto na tela da aba "Relatórios & Exportação" (conforme solicitado para
-          remover os elementos visuais duplicados em tela), mas mantido em 1280px no DOM
-          para captura pelo html2canvas/jsPDF e exibido automaticamente durante @media print.
-          ========================================================================= */}
+      {/* Container Offscreen #print-executive-report */}
       <div 
         id="print-executive-report"
         aria-hidden="true"
@@ -410,9 +472,7 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
         />
       </div>
 
-      {/* =========================================================================
-          MODAL 1: SALVAR COMO PDF — ESCOLHER LOCAL PARA SALVAR O ARQUIVO
-          ========================================================================= */}
+      {/* Modal 1: Salvar como PDF */}
       {showSaveLocationModal && (
         <div className="no-print fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-xl w-full overflow-hidden">
@@ -424,10 +484,10 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-white">
-                    Salvar como PDF — Escolher Local para Salvar
+                    Exportação de PDF — Alta Performance
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Defina a pasta de destino e o nome do arquivo PDF do Dashboard Executivo
+                    Escolha a modalidade de download e o nome do arquivo executivo
                   </p>
                 </div>
               </div>
@@ -440,60 +500,56 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
             </div>
 
             <form onSubmit={handleConfirmSavePdf} className="p-6 space-y-4 text-xs">
-              {/* Seleção de Pasta / Diretório */}
+              {/* Modalidade de Salvamento */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="font-bold text-slate-800 flex items-center gap-1.5">
-                    <HardDrive className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>Local / Pasta de Destino:</span>
-                  </label>
+                <label className="block font-bold text-slate-800 mb-2">
+                  Método de Armazenamento:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <button
                     type="button"
-                    onClick={handleBrowseSystemFolder}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-md transition-colors cursor-pointer"
+                    onClick={() => setSaveMode('instant')}
+                    className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
+                      saveMode === 'instant'
+                        ? 'bg-emerald-50/90 border-emerald-600 text-emerald-950 shadow-2xs ring-1 ring-emerald-600'
+                        : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+                    }`}
                   >
-                    <FolderOpen className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>Procurar Pasta no Computador...</span>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-bold flex items-center gap-1.5">
+                        <ArrowDownToLine className="w-4 h-4 text-emerald-700" />
+                        <span>Download Imediato</span>
+                      </span>
+                      {saveMode === 'instant' && <Check className="w-4 h-4 text-emerald-600" />}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Grava diretamente na pasta padrão do seu navegador com velocidade máxima e desalocação de memória segura.
+                    </p>
                   </button>
-                </div>
 
-                <div className="space-y-1.5">
-                  {presetDirectories.map((dir) => {
-                    const isSelected = selectedDirectory === dir.path;
-                    return (
-                      <button
-                        key={dir.path}
-                        type="button"
-                        onClick={() => {
-                          setDirectoryHandle(null);
-                          setSelectedDirectory(dir.path);
-                        }}
-                        className={`w-full text-left px-3 py-2 rounded-lg border transition-all flex items-center justify-between cursor-pointer ${
-                          isSelected
-                            ? 'bg-emerald-50/80 border-emerald-600 text-slate-900 font-semibold'
-                            : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
-                        }`}
-                      >
-                        <div className="truncate pr-2">
-                          <span className="block text-xs">{dir.label}</span>
-                          <span className="block text-[10px] font-mono text-slate-500 truncate">{dir.path}</span>
-                        </div>
-                        {isSelected && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-2">
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    Caminho Selecionado:
-                  </label>
-                  <input
-                    type="text"
-                    value={selectedDirectory}
-                    onChange={(e) => setSelectedDirectory(e.target.value)}
-                    className="w-full px-3 py-1.5 font-mono text-[11px] border border-slate-300 rounded-md bg-white text-slate-800 focus:outline-emerald-600"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSaveMode('system_picker');
+                      handleBrowseSystemFolder();
+                    }}
+                    className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
+                      saveMode === 'system_picker'
+                        ? 'bg-emerald-50/90 border-emerald-600 text-emerald-950 shadow-2xs ring-1 ring-emerald-600'
+                        : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-bold flex items-center gap-1.5">
+                        <HardDrive className="w-4 h-4 text-emerald-700" />
+                        <span>Escolher Pasta no S.O.</span>
+                      </span>
+                      {saveMode === 'system_picker' && <Check className="w-4 h-4 text-emerald-600" />}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Abre a janela nativa do Windows/macOS para escolher a pasta de destino (File System Access).
+                    </p>
+                  </button>
                 </div>
               </div>
 
@@ -510,15 +566,21 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
                   placeholder="Relatorio_Executivo_Dashboard.pdf"
                   className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50 focus:bg-white text-slate-900 font-medium focus:outline-emerald-600"
                 />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Caracteres especiais são automaticamente sanitizados para preservar a integridade do sistema de arquivos.
+                </p>
               </div>
 
-              {/* Resumo de Formato */}
-              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between text-[11px] text-slate-600">
-                <span>Formato: <strong>PDF A4 Paisagem (Widescreen 16:9)</strong></span>
-                <span className="text-emerald-700 font-semibold">Alta Resolução (300 DPI)</span>
+              {/* Informações Técnicas de Otimização */}
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-600">
+                <span className="flex items-center gap-1">
+                  <Zap className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Pipeline: <strong>Widescreen 16:9 · Landscape A4</strong></span>
+                </span>
+                <span className="text-emerald-700 font-semibold">Descarregamento não-bloqueante</span>
               </div>
 
-              {/* Rodapé do Modal */}
+              {/* Rodapé */}
               <div className="pt-2 border-t border-slate-200 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
@@ -532,7 +594,7 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
                   className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-600 rounded-lg transition-colors shadow-xs cursor-pointer"
                 >
                   <FileDown className="w-4 h-4" />
-                  <span>Salvar Arquivo PDF</span>
+                  <span>Iniciar Exportação</span>
                 </button>
               </div>
             </form>
@@ -540,9 +602,7 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
         </div>
       )}
 
-      {/* =========================================================================
-          MODAL 2: IMPRIMIR RELATÓRIO — OPÇÃO DE ESCOLHA DA IMPRESSORA
-          ========================================================================= */}
+      {/* Modal 2: Imprimir Relatório */}
       {showPrinterModal && (
         <div className="no-print fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-xl w-full overflow-hidden">
@@ -554,10 +614,10 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-white">
-                    Imprimir Relatório — Escolher Impressora
+                    Imprimir Relatório — Seletor de Dispositivo
                   </h3>
                   <p className="text-xs text-blue-100">
-                    Selecione a impressora de destino e os parâmetros de página para o Dashboard Executivo
+                    Configure a saída de impressão do Dashboard Executivo
                   </p>
                 </div>
               </div>
@@ -574,7 +634,7 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
               <div>
                 <label className="block font-bold text-slate-800 mb-2 flex items-center gap-1.5">
                   <Printer className="w-3.5 h-3.5 text-[#0A3977]" />
-                  <span>Selecione a Impressora de Destino:</span>
+                  <span>Destino de Impressão:</span>
                 </label>
 
                 <div className="space-y-2">
@@ -617,7 +677,7 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
               <div className="pt-2 border-t border-slate-100">
                 <div className="flex items-center gap-1.5 font-bold text-slate-800 mb-2.5">
                   <SlidersHorizontal className="w-3.5 h-3.5 text-[#0A3977]" />
-                  <span>Preferências da Folha de Impressão:</span>
+                  <span>Preferências de Enquadramento:</span>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -685,11 +745,11 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
                     onChange={(e) => setPrintScaleFit(e.target.checked)}
                     className="rounded border-slate-300 text-[#0A3977] focus:ring-[#0A3977]"
                   />
-                  <span>Ajustar automaticamente todo o Dashboard Executivo em uma única página</span>
+                  <span>Ajustar proporcionalmente todo o Dashboard Executivo para folha única (Single Page Fit)</span>
                 </label>
               </div>
 
-              {/* Rodapé do Modal */}
+              {/* Rodapé */}
               <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
                 <button
                   type="button"

@@ -13,7 +13,8 @@ import {
   CheckCircle2, 
   FileSpreadsheet,
   Download,
-  Database
+  Database,
+  Printer
 } from 'lucide-react';
 import { DisciplineMetric, SystemConfig, AcademicCourse, ImportSession } from '../types';
 import { ExecutiveDashboardCanvas } from './ExecutiveDashboardCanvas';
@@ -221,7 +222,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return (b.studyHoursPerWeek || 0) - (a.studyHoursPerWeek || 0);
   });
 
-  const maxStudyHours = sortedDisciplines.length > 0 ? (sortedDisciplines[0].studyHoursPerWeek || 9.42) : 10;
+  // Risk & Priority Diagnostics (strictly derived from active disciplines)
+  const sortedByRisk = [...disciplines].sort((a, b) => b.ars - a.ars);
+  const highestRiskDiscipline = sortedByRisk[0];
+  const highRiskDisciplines = disciplines.filter((d) => d.ars >= 45);
+  const alertRiskDisciplines = disciplines.filter((d) => d.ars >= 25 && d.ars < 45);
+  const controlledRiskDisciplines = disciplines.filter((d) => d.ars < 25);
+  const priorityDisciplinesCount = highRiskDisciplines.length + alertRiskDisciplines.length;
+  const priorityStudentsCount = [...highRiskDisciplines, ...alertRiskDisciplines].reduce(
+    (acc, curr) => acc + curr.totalStudents,
+    0
+  );
 
   return (
     <div className="space-y-6">
@@ -260,6 +271,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           }`}>
             {hasData ? 'Base Ativa' : 'Base Zerada'}
           </span>
+
+          <button
+            type="button"
+            onClick={() => window.print()}
+            title="Gerar versão em PDF ou impressa deste relatório executivo (A4 Paisagem)"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0A3977] hover:bg-[#082e60] text-white font-semibold text-xs rounded-md shadow-xs transition-colors cursor-pointer border border-[#082e60]"
+          >
+            <Printer className="w-3.5 h-3.5 text-[#FFB800]" />
+            <span>Exportar PDF</span>
+          </button>
         </div>
       </div>
 
@@ -309,7 +330,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <p className="text-slate-600 leading-relaxed">
               {hasData ? (
                 <>
-                  Frequência média de <strong>{attendanceDisplay}</strong> (<em>Quantidade de presenças / Quantidade de presença + faltas</em>), variação de <strong>{attendanceDiff}</strong> {attendanceDiffText}. A partir de 2024.1, todas as modalidades seguem com <strong>SM1 e SM2</strong> na Adesão SM.
+                  Frequência média de <strong>{attendanceDisplay}</strong> (<em>Quantidade de presenças / Quantidade de presença + faltas</em>), variação de <strong>{attendanceDiff}</strong> {attendanceDiffText}. Adesão consolidada na fonte: <strong>{adhesionAVDisplay} (AV)</strong> e <strong>{adhesionSMDisplay} (SM)</strong>.
                 </>
               ) : (
                 'Base de dados limpa. Frequência calculada por: Quantidade de presenças / Quantidade de presença + faltas (Pulso 1.0 / 2.0).'
@@ -325,21 +346,99 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         </div>
 
-        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-xs flex flex-col justify-between">
+        <div className={`p-4 rounded-lg border shadow-xs flex flex-col justify-between transition-colors ${
+          !hasData
+            ? 'bg-white border-slate-200'
+            : highRiskDisciplines.length > 0
+            ? 'bg-rose-50/40 border-rose-200'
+            : alertRiskDisciplines.length > 0
+            ? 'bg-amber-50/40 border-amber-200'
+            : 'bg-emerald-50/40 border-emerald-200'
+        }`}>
           <div>
-            <div className="flex items-center gap-2 font-bold text-slate-800 mb-1">
-              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-              <span>Governança Pulso 2.0 & Reprovação</span>
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <div className="flex items-center gap-2 font-bold text-slate-800">
+                <ShieldAlert className={`w-4 h-4 shrink-0 ${
+                  !hasData
+                    ? 'text-slate-400'
+                    : highRiskDisciplines.length > 0
+                    ? 'text-rose-600'
+                    : alertRiskDisciplines.length > 0
+                    ? 'text-amber-600'
+                    : 'text-emerald-600'
+                }`} />
+                <span>Diagnóstico de Risco (ARS {avgARS}) & Prioridade</span>
+              </div>
+              {hasData && (
+                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border shrink-0 ${
+                  highRiskDisciplines.length > 0
+                    ? 'bg-rose-100 text-rose-800 border-rose-300'
+                    : alertRiskDisciplines.length > 0
+                    ? 'bg-amber-100 text-amber-800 border-amber-300'
+                    : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                }`}>
+                  {highRiskDisciplines.length > 0
+                    ? `${highRiskDisciplines.length} Crítica(s)`
+                    : alertRiskDisciplines.length > 0
+                    ? `${alertRiskDisciplines.length} em Alerta`
+                    : '100% Controlado'}
+                </span>
+              )}
             </div>
-            <p className="text-slate-600 leading-relaxed">
-              No <strong>Pulso 2.0</strong>, a Reprovação considera os alunos com nota &lt; 6 na expressão <em>maior nota entre (AV, NC e AVS) + (SM1 + SM2)</em> dividido pelos alunos que realizaram ao menos uma das três avaliações, refletindo também a nova modelagem estrutural de dados.
-            </p>
+
+            {hasData && highestRiskDiscipline ? (
+              <div className="space-y-2">
+                <p className="text-slate-600 leading-relaxed">
+                  {priorityDisciplinesCount > 0 ? (
+                    <>
+                      <strong>{priorityDisciplinesCount} de {totalDisciplines} turmas</strong> ({priorityStudentsCount} alunos) requerem acompanhamento (<strong>{highRiskDisciplines.length}</strong> em Alto Risco, <strong>{alertRiskDisciplines.length}</strong> em Alerta e <strong>{controlledRiskDisciplines.length}</strong> Controladas). Prioridade #1: <strong>{highestRiskDiscipline.name}</strong> ({highestRiskDiscipline.code}) com <strong>ARS {highestRiskDiscipline.ars.toFixed(1)}</strong> e estudo de <strong>{highestRiskDiscipline.studyTimeFormatted || '00:00'}</strong>.
+                    </>
+                  ) : (
+                    <>
+                      Todas as <strong>{totalDisciplines} turmas</strong> ({totalStudents} alunos) operam em <strong>Nível Controlado</strong> (ARS &lt; 25). Maior pontuação de atenção atual: <strong>{highestRiskDiscipline.name}</strong> ({highestRiskDiscipline.code}) com <strong>ARS {highestRiskDiscipline.ars.toFixed(1)}</strong> e saúde LHI de <strong>{highestRiskDiscipline.lhi.toFixed(1)}</strong>.
+                    </>
+                  )}
+                </p>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="bg-white/90 px-2.5 py-1.5 rounded border border-slate-200/80 flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-slate-500 uppercase">Aprendizagem</span>
+                    <span className="text-[11px] font-extrabold text-slate-800 tabular-nums">
+                      {learningScoreDisplay} <span className="text-[10px] font-normal text-slate-400">(Meta {learningTarget})</span>
+                    </span>
+                  </div>
+                  <div className="bg-white/90 px-2.5 py-1.5 rounded border border-slate-200/80 flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-slate-500 uppercase">Reprovação</span>
+                    <span className="text-[11px] font-extrabold text-slate-800 tabular-nums">
+                      {failureRateDisplay} <span className="text-[10px] font-normal text-slate-400">(Meta {failureTarget})</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-slate-600 leading-relaxed">
+                Base de dados limpa. Importe um relatório oficial para visualizar o mapeamento automático de turmas críticas (ARS), prioridades de intervenção pedagógica e metas de aprovação.
+              </p>
+            )}
           </div>
+
           <button
-            onClick={onNavigateToSources}
-            className="mt-3 text-slate-700 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+            onClick={() => onNavigateToAudit({ riskOnly: priorityDisciplinesCount > 0 })}
+            className={`mt-3 font-semibold hover:underline flex items-center gap-1 cursor-pointer ${
+              !hasData
+                ? 'text-blue-600'
+                : highRiskDisciplines.length > 0
+                ? 'text-rose-700'
+                : alertRiskDisciplines.length > 0
+                ? 'text-amber-800'
+                : 'text-emerald-700'
+            }`}
           >
-            <span>Gerenciar Fontes & Power BI</span>
+            <span>
+              {priorityDisciplinesCount > 0
+                ? `Inspecionar ${priorityDisciplinesCount} turma(s) prioritária(s) por Risco`
+                : 'Inspecionar ranking de Risco (ARS) e Saúde (LHI)'}
+            </span>
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>

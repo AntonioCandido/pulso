@@ -312,15 +312,15 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
               <ul className="space-y-2 text-xs text-slate-600 my-4 border-y border-slate-100 py-3">
                 <li className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                  <span><strong>Slide 1:</strong> Capa Institucional</span>
+                  <span><strong>Deck Executivo:</strong> 8 slides widescreen 16:9 no padrão Estácio</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                  <span><strong>Slide 2:</strong> Executive Dashboard</span>
+                  <span><strong>Data Storytelling:</strong> Real vs. Metas (Aprendizagem, Frequência, Reprovação)</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                  <span><strong>Slide 3 & 4:</strong> Diretrizes & Ações</span>
+                  <span><strong>Governança:</strong> Plano de ação tático (01 a 04) e apêndice auditado</span>
                 </li>
               </ul>
             </div>

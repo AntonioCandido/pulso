@@ -58,6 +58,13 @@ interface PendingImportData {
 
 export const AVAILABLE_SAMPLE_REPORTS: PDFDocumentItem[] = [
   {
+    fileName: 'Pulso Acadêmico IMPAR_TJ.pdf',
+    description: 'Relatório Oficial Campus TOM JOBIM · 18:56 de estudo, 85,78% freq, 78 alunos (Ciência da Computação)',
+    recordCount: 15,
+    fileSize: '148 KB',
+    uploadedDate: '2026-10-29',
+  },
+  {
     fileName: 'Pulso Acadêmico IMPAR R9.pdf',
     description: 'Relatório Oficial Campus R9 - Taquara · 21:50 de estudo, 78,89% freq, 103 alunos (Ciência da Computação)',
     recordCount: 15,
@@ -73,7 +80,7 @@ export const AVAILABLE_SAMPLE_REPORTS: PDFDocumentItem[] = [
   },
   {
     fileName: 'Pulso Acadêmico TOM JOBIM.pdf',
-    description: 'Relatório Oficial Campus TOM JOBIM · 18:56 de estudo, 85,78% freq, 107 alunos (Ciência da Computação)',
+    description: 'Relatório Oficial Campus TOM JOBIM · 18:56 de estudo, 85,78% freq, 78 alunos (Ciência da Computação)',
     recordCount: 15,
     fileSize: '312 KB',
     uploadedDate: '2026-10-15',
@@ -122,10 +129,10 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
   // Sample / Template Reports List state - allows deleting models with persistence
   const [sampleReports, setSampleReports] = useState<PDFDocumentItem[]>(() => {
     try {
-      const saved = localStorage.getItem('pulso_sample_reports_v1');
+      const saved = localStorage.getItem('pulso_sample_reports_v2');
       if (saved !== null) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed) && parsed.some((p: any) => p.fileName.includes('IMPAR_TJ'))) return parsed;
       }
     } catch (e) {}
     return AVAILABLE_SAMPLE_REPORTS;
@@ -133,7 +140,7 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
 
   useEffect(() => {
     try {
-      localStorage.setItem('pulso_sample_reports_v1', JSON.stringify(sampleReports));
+      localStorage.setItem('pulso_sample_reports_v2', JSON.stringify(sampleReports));
     } catch (e) {}
   }, [sampleReports]);
 
@@ -544,15 +551,15 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
         importId: `import_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         version: Date.now(),
         fileName: fileObj.name,
-        fileSize: fileObj.size ? `${(fileObj.size / 1024).toFixed(0)} KB` : '245 KB',
+        fileSize: fileObj.size ? `${(fileObj.size / 1024).toFixed(0)} KB` : '148 KB',
         importedAt: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
         sourceType: 'PDF',
         totalRecords: extracted.length,
         totalStudents,
         campus: exec?.campus || extracted[0]?.campus || 'Campus Principal',
         course: exec?.course || extracted[0]?.course || 'Ciência da Computação',
-        studyTimeFormatted: exec?.studyTimeFormatted || '21:50',
-        attendanceRate: exec?.attendanceRate || 78.89,
+        studyTimeFormatted: exec?.studyTimeFormatted || (extracted[0]?.studyTimeFormatted ? extracted[0].studyTimeFormatted : '00:00'),
+        attendanceRate: exec?.attendanceRate ?? (extracted.length > 0 ? Number((extracted.reduce((acc, c) => acc + c.attendanceRate, 0) / extracted.length).toFixed(2)) : 0),
       };
 
       // Stage new data cleanly; DO NOT commit to state yet

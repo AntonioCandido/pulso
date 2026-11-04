@@ -7,8 +7,9 @@ import {
   Database, 
   TableProperties, 
   Sliders, 
-  CheckCircle2,
-  FileCheck2
+  CheckCircle2, 
+  FileCheck2,
+  Printer
 } from 'lucide-react';
 
 interface TopBarProps {
@@ -104,6 +105,19 @@ export const TopBar: React.FC<TopBarProps> = ({
               <div className="px-2 py-1.5 text-[11px] font-semibold text-slate-500 border-b border-slate-100 uppercase tracking-wider">
                 Saída Executiva Widescreen & Planilhas
               </div>
+              <button
+                onClick={() => {
+                  setActiveTab('dashboard');
+                  setTimeout(() => window.print(), 100);
+                }}
+                className="w-full flex items-center gap-2.5 px-2.5 py-2 mt-1 rounded hover:bg-slate-100 transition-colors text-left"
+              >
+                <Printer className="w-4 h-4 text-[#0A3977] shrink-0" />
+                <div>
+                  <div className="font-semibold text-slate-900">Relatório Executivo em PDF</div>
+                  <div className="text-[11px] text-slate-500">Impressão A4 Paisagem formatada</div>
+                </div>
+              </button>
               <button
                 onClick={onQuickExportExcel}
                 className="w-full flex items-center gap-2.5 px-2.5 py-2 mt-1 rounded hover:bg-slate-100 transition-colors text-left"

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clock, Calendar, MapPin, Database, Info, X, AlertTriangle, CheckCircle2, ShieldAlert, Lightbulb } from 'lucide-react';
+import { Clock, Calendar, MapPin, Database, Info, X, AlertTriangle, CheckCircle2, ShieldAlert, Lightbulb, Printer } from 'lucide-react';
 import { DisciplineMetric, SystemConfig, ImportSession } from '../types';
 
 export interface ExecutiveDashboardCanvasProps {
@@ -374,19 +374,34 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
             </h2>
           </div>
 
-          {/* Slide Metadata */}
-          <div className="text-xs space-y-1 text-slate-100/90 font-medium md:text-right print:text-right">
-            <div className="flex items-center md:justify-end print:justify-end gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-[#38BDF8]" />
-              <span className="font-semibold text-white">{campusLabel}</span>
+          {/* Slide Metadata & Actions */}
+          <div className="flex flex-col sm:flex-row md:flex-col print:flex-row items-start sm:items-center md:items-end print:items-end justify-between gap-3">
+            <div className="text-xs space-y-1 text-slate-100/90 font-medium md:text-right print:text-right">
+              <div className="flex items-center md:justify-end print:justify-end gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-[#38BDF8]" />
+                <span className="font-semibold text-white">{campusLabel}</span>
+              </div>
+              <div className="flex items-center md:justify-end print:justify-end gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-[#38BDF8]" />
+                <span>{hasData ? (executive?.entryYear ? `Ano Entrada: ${executive.entryYear} · Período ${config.academicPeriod}` : `Período ${config.academicPeriod}`) : 'Período --'}</span>
+              </div>
+              <div className="flex items-center md:justify-end print:justify-end gap-1.5 text-white/80 text-[11px]">
+                <Clock className="w-3 h-3 text-[#38BDF8]" />
+                <span>{lastUpdatedText}</span>
+              </div>
             </div>
-            <div className="flex items-center md:justify-end print:justify-end gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-[#38BDF8]" />
-              <span>{hasData ? (executive?.entryYear ? `Ano Entrada: ${executive.entryYear} · Período ${config.academicPeriod}` : `Período ${config.academicPeriod}`) : 'Período --'}</span>
-            </div>
-            <div className="flex items-center md:justify-end print:justify-end gap-1.5 text-white/80 text-[11px]">
-              <Clock className="w-3 h-3 text-[#38BDF8]" />
-              <span>{lastUpdatedText}</span>
+
+            {/* Quick Export PDF / Print Button for the Executive Report */}
+            <div className="no-print">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                title="Gerar versão em PDF ou impressa deste relatório executivo (A4 Paisagem)"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#FFB800] hover:bg-[#FFA500] text-slate-950 font-bold text-xs rounded-md shadow-sm transition-all duration-150 hover:shadow-md cursor-pointer active:scale-95 border border-[#e5a600]"
+              >
+                <Printer className="w-3.5 h-3.5 text-slate-950" />
+                <span>Exportar PDF</span>
+              </button>
             </div>
           </div>
         </div>

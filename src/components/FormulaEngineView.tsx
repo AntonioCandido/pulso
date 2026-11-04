@@ -78,7 +78,7 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
             <span>RF03</span>
@@ -94,69 +94,11 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
           </h1>
         </div>
 
-        {/* Preset Selector */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-500 font-medium">Perfis Pré-calibrados:</span>
-          <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-200/80 rounded-lg">
-            <button
-              type="button"
-              onClick={() => handleApplyPreset('estacio')}
-              className={`px-3 py-1.5 text-xs rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
-                activePresetId === 'estacio'
-                  ? 'bg-[#0A3977] text-white font-bold shadow-xs'
-                  : 'font-semibold text-slate-700 hover:bg-white'
-              }`}
-              title="Perfil Default Oficial: utiliza as regras da Matriz Conceitual de Indicadores — Pulso 2.0"
-            >
-              <Sparkles className={`w-3.5 h-3.5 ${activePresetId === 'estacio' ? 'text-[#FFB800]' : 'text-[#0A3977]'}`} />
-              <span>Padrão Estácio</span>
-              <span
-                className={`text-[10px] px-1.5 py-0.2 rounded font-extrabold uppercase ${
-                  activePresetId === 'estacio'
-                    ? 'bg-[#FFB800] text-[#0A3977]'
-                    : 'bg-slate-300/80 text-slate-700'
-                }`}
-              >
-                Default
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleApplyPreset('mec')}
-              className={`px-2.5 py-1.5 text-xs rounded-md transition-all cursor-pointer ${
-                activePresetId === 'mec'
-                  ? 'bg-white text-slate-900 font-bold shadow-xs'
-                  : 'font-medium text-slate-700 hover:bg-white'
-              }`}
-            >
-              Padrão MEC
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleApplyPreset('retention')}
-              className={`px-2.5 py-1.5 text-xs rounded-md transition-all cursor-pointer ${
-                activePresetId === 'retention'
-                  ? 'bg-white text-slate-900 font-bold shadow-xs'
-                  : 'font-medium text-slate-700 hover:bg-white'
-              }`}
-            >
-              Foco Retenção
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleApplyPreset('rigor')}
-              className={`px-2.5 py-1.5 text-xs rounded-md transition-all cursor-pointer ${
-                activePresetId === 'rigor'
-                  ? 'bg-white text-slate-900 font-bold shadow-xs'
-                  : 'font-medium text-slate-700 hover:bg-white'
-              }`}
-            >
-              Rigor Avaliativo
-            </button>
-          </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Pulso {localWeights.pulsoRuleVersion || '2.0'} Ativo</span>
+          </span>
         </div>
       </div>
 
@@ -230,6 +172,93 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
               <code className="font-mono font-semibold">Presenças / (Presença + Faltas)</code> com fonte e modelagem estrutural Pulso 2.0.
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* Perfis Pré-calibrados - Posicionado imediatamente acima do objeto Learning Health Index */}
+      <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-[#0A3977]/10 text-[#0A3977] flex items-center justify-center font-bold shrink-0">
+            <Sparkles className="w-4.5 h-4.5 text-[#FFB800]" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                Perfis Pré-calibrados:
+              </span>
+              <span className="text-[10px] font-semibold bg-[#0A3977]/10 text-[#0A3977] px-2 py-0.5 rounded">
+                Calibragem de Pesos LHI & ARS
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Selecione um perfil institucional para configurar instantaneamente os pesos das fórmulas de LHI e ARS
+            </p>
+          </div>
+        </div>
+
+        {/* Preset Selector Buttons */}
+        <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-200/80 rounded-lg shrink-0">
+          <button
+            type="button"
+            onClick={() => handleApplyPreset('estacio')}
+            className={`px-3 py-1.5 text-xs rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
+              activePresetId === 'estacio'
+                ? 'bg-[#0A3977] text-white font-bold shadow-xs'
+                : 'font-semibold text-slate-700 hover:bg-white'
+            }`}
+            title="Perfil Default Oficial: utiliza as regras da Matriz Conceitual de Indicadores — Pulso 2.0"
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${activePresetId === 'estacio' ? 'text-[#FFB800]' : 'text-[#0A3977]'}`} />
+            <span>Padrão Estácio</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded font-extrabold uppercase ${
+                activePresetId === 'estacio'
+                  ? 'bg-[#FFB800] text-[#0A3977]'
+                  : 'bg-slate-300/80 text-slate-700'
+              }`}
+            >
+              Default
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleApplyPreset('mec')}
+            className={`px-2.5 py-1.5 text-xs rounded-md transition-all cursor-pointer ${
+              activePresetId === 'mec'
+                ? 'bg-white text-slate-900 font-bold shadow-xs'
+                : 'font-medium text-slate-700 hover:bg-white'
+            }`}
+            title="Perfil focado nas métricas regulatórias do MEC"
+          >
+            Padrão MEC
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleApplyPreset('retention')}
+            className={`px-2.5 py-1.5 text-xs rounded-md transition-all cursor-pointer ${
+              activePresetId === 'retention'
+                ? 'bg-white text-slate-900 font-bold shadow-xs'
+                : 'font-medium text-slate-700 hover:bg-white'
+            }`}
+            title="Perfil priorizando retenção e combate à infrequência"
+          >
+            Foco Retenção
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleApplyPreset('rigor')}
+            className={`px-2.5 py-1.5 text-xs rounded-md transition-all cursor-pointer ${
+              activePresetId === 'rigor'
+                ? 'bg-white text-slate-900 font-bold shadow-xs'
+                : 'font-medium text-slate-700 hover:bg-white'
+            }`}
+            title="Perfil priorizando rigor avaliativo e desempenho acadêmico"
+          >
+            Rigor Avaliativo
+          </button>
         </div>
       </div>
 

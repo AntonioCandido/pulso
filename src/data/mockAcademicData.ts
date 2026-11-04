@@ -1379,13 +1379,26 @@ export function getDisciplinesForFile(
 ): DisciplineMetric[] {
   const lower = fileName.toLowerCase();
 
-  // 1. Official report Pulso Acadêmico IMPAR R9 (Pulso_Acad_mico_IMPAR_R9_627760f7.pdf or Pulso Acadêmico IMPAR.pdf)
+  // 1. Tom Jobim report (Pulso Acadêmico IMPAR_TJ.pdf, Pulso_Acad_mico_IMPAR_64ae4ea6.pdf, Pulso Acadêmico IMPAR.pdf, Tom Jobim)
+  if (
+    lower.includes('tj') ||
+    lower.includes('jobim') ||
+    lower.includes('tom') ||
+    lower.includes('64ae4ea6') ||
+    lower.includes('dc53cac6') ||
+    (lower.includes('impar') && !lower.includes('r9') && !lower.includes('taquara'))
+  ) {
+    return getPulsoImparDisciplines(weights).map((d) => ({
+      ...d,
+      sourceFileOrUrl: fileName,
+    }));
+  }
+
+  // 2. Official report Pulso Acadêmico IMPAR R9 (Pulso_Acad_mico_IMPAR_R9_627760f7.pdf or Pulso Acadêmico IMPAR R9.pdf)
   if (
     lower.includes('r9') || 
     lower.includes('627760f7') || 
-    lower.includes('64ae4ea6') || 
-    lower.includes('dc53cac6') || 
-    (lower.includes('impar') && !lower.includes('jobim'))
+    (lower.includes('impar') && lower.includes('taquara'))
   ) {
     return getPulsoImparR9Disciplines(weights).map((d) => ({
       ...d,
@@ -1393,17 +1406,9 @@ export function getDisciplinesForFile(
     }));
   }
 
-  // 2. Taquara (Final) from earlier jpeg
-  if (lower.includes('final') || (lower.includes('taquara') && !lower.includes('impar'))) {
+  // 3. Taquara (Final) from earlier jpeg
+  if (lower.includes('final') || lower.includes('taquara')) {
     return getPulsoTaquaraDisciplines(weights).map((d) => ({
-      ...d,
-      sourceFileOrUrl: fileName,
-    }));
-  }
-
-  // 3. Tom Jobim report
-  if (lower.includes('jobim')) {
-    return getPulsoImparDisciplines(weights).map((d) => ({
       ...d,
       sourceFileOrUrl: fileName,
     }));

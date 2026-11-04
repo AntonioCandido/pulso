@@ -16,7 +16,14 @@ import {
   Users,
   BookOpen,
   Activity,
-  CheckSquare
+  CheckSquare,
+  Calculator,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Scale,
+  Copy,
+  Check
 } from 'lucide-react';
 import { DisciplineMetric, AcademicCourse, LHIStatus, ARSLevel, FormulaWeights } from '../types';
 import { calculateLHI, calculateARS, getLHIStatus, getARSLevel, getRecommendedPedagogicalAction } from '../utils/calculations';
@@ -162,6 +169,11 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
 
   // Detail drawer state
   const [viewingDetailItem, setViewingDetailItem] = useState<DisciplineMetric | null>(null);
+
+  // Calculation verification panel state (RF04 - Formula transparency)
+  const [selectedCalcDiscipline, setSelectedCalcDiscipline] = useState<DisciplineMetric | null>(null);
+  const [copiedFormula, setCopiedFormula] = useState<boolean>(false);
+  const [calcViewMode, setCalcViewMode] = useState<'both' | 'lhi' | 'ars'>('both');
 
   // Risk distribution counts across the current base (filtered by course/search/semester so cards stay contextual)
   const riskCounts = useMemo(() => {
@@ -432,6 +444,19 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                 </div>
               </div>
             )}
+
+            {/* Calculation Verification Panel trigger button */}
+            <button
+              onClick={() => setSelectedCalcDiscipline(filteredData[0] || disciplines[0] || null)}
+              className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-[#0A3977] bg-white hover:bg-blue-50 border border-blue-200 hover:border-blue-300 rounded-lg shadow-2xs transition-all cursor-pointer"
+              title="Abrir Painel de Verificação e Memória de Cálculo (Transparência LHI/ARS)"
+            >
+              <Calculator className="w-4 h-4 text-[#0A3977]" />
+              <span className="hidden sm:inline">Verificar Cálculos</span>
+              <span className="text-[10px] bg-blue-100 text-[#0A3977] font-bold px-1.5 py-0.5 rounded">
+                LHI / ARS
+              </span>
+            </button>
           </div>
         </div>
 
@@ -989,9 +1014,13 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                         <div className="text-[10px] text-slate-400">hh:mm acum.</div>
                       </td>
 
-                      {/* LHI (Saúde) with semantic status color */}
-                      <td className={`py-3.5 px-3 text-right tabular-nums ${healthTheme.bgTint}`}>
-                        <div className={`font-extrabold text-sm ${healthTheme.textColor}`}>
+                      {/* LHI (Saúde) with semantic status color - Clickable for formula audit */}
+                      <td 
+                        onClick={() => setSelectedCalcDiscipline(item)}
+                        className={`py-3.5 px-3 text-right tabular-nums ${healthTheme.bgTint} cursor-pointer group hover:brightness-95 transition-all`}
+                        title="Clique para auditar a memória de cálculo da fórmula LHI"
+                      >
+                        <div className={`font-extrabold text-sm ${healthTheme.textColor} group-hover:underline`}>
                           {item.lhi.toFixed(1)}
                         </div>
                         <div className={`text-[11px] font-semibold ${healthTheme.subTextColor}`}>
@@ -1005,11 +1034,15 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                         </div>
                       </td>
 
-                      {/* ARS (Risco) with dedicated semantic color highlight */}
-                      <td className={`py-3.5 px-4 text-right tabular-nums ${riskTheme.bgTint}`}>
+                      {/* ARS (Risco) with dedicated semantic color highlight - Clickable for formula audit */}
+                      <td 
+                        onClick={() => setSelectedCalcDiscipline(item)}
+                        className={`py-3.5 px-4 text-right tabular-nums ${riskTheme.bgTint} cursor-pointer group hover:brightness-95 transition-all`}
+                        title="Clique para auditar a memória de cálculo da fórmula ARS"
+                      >
                         <div className="flex items-center justify-end gap-1.5">
                           <RiskIcon className={`w-3.5 h-3.5 shrink-0 ${riskTheme.iconColor}`} />
-                          <span className={`font-extrabold text-sm ${riskTheme.textColor}`}>
+                          <span className={`font-extrabold text-sm ${riskTheme.textColor} group-hover:underline`}>
                             {item.ars.toFixed(1)}
                           </span>
                         </div>
@@ -1027,6 +1060,13 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                       {/* Actions */}
                       <td className="py-3.5 px-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => setSelectedCalcDiscipline(item)}
+                            className="p-1.5 text-[#0A3977] bg-blue-50/70 hover:bg-blue-100 hover:text-blue-900 rounded-md transition-colors cursor-pointer"
+                            title="Verificar Memória de Cálculo (Fórmulas LHI e ARS)"
+                          >
+                            <Calculator className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             onClick={() => {
                               setEditingItem({ ...item });
@@ -1406,6 +1446,714 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* MODAL 3: Calculation Verification & Formula Transparency Panel */}
+      {selectedCalcDiscipline && (() => {
+        const item = selectedCalcDiscipline;
+        const currentIndex = filteredData.findIndex((d) => d.id === item.id);
+        const hasPrev = currentIndex > 0;
+        const hasNext = currentIndex >= 0 && currentIndex < filteredData.length - 1;
+
+        // LHI Calculations Breakdown
+        const passRate = Math.max(0, 100 - item.failureRate);
+        const lhiLearnContrib = Number((item.learningScore * weights.lhi.learningScore).toFixed(2));
+        const lhiAttendContrib = Number((item.attendanceRate * weights.lhi.attendance).toFixed(2));
+        const lhiPassContrib = Number((passRate * weights.lhi.passRate).toFixed(2));
+        const lhiLmsContrib = Number((item.lmsAdherenceRate * weights.lhi.lmsAdherence).toFixed(2));
+        const lhiRawTotal = Number((lhiLearnContrib + lhiAttendContrib + lhiPassContrib + lhiLmsContrib).toFixed(2));
+        const lhiStatus = getLHIStatus(item.lhi);
+        const lhiHealthTheme = getLHIHealthTheme(lhiStatus, item.lhi);
+        const isLhiConsistent = Math.abs(lhiRawTotal - item.lhi) < 0.25;
+
+        // ARS Calculations Breakdown
+        const infrequency = Number(Math.max(0, 100 - item.attendanceRate).toFixed(1));
+        const learningDeficit = Number(Math.max(0, 100 - item.learningScore).toFixed(1));
+        const arsFailContrib = Number((item.failureRate * weights.ars.failureRate).toFixed(2));
+        const arsInfreqContrib = Number((infrequency * weights.ars.infrequency).toFixed(2));
+        const arsDeficitContrib = Number((learningDeficit * weights.ars.learningDeficit).toFixed(2));
+        const arsDropContrib = Number((item.dropoutRiskRate * weights.ars.dropoutRisk).toFixed(2));
+        const arsRawTotal = Number((arsFailContrib + arsInfreqContrib + arsDeficitContrib + arsDropContrib).toFixed(2));
+        const arsLevel = getARSLevel(item.ars);
+        const arsRiskTheme = getARSRiskTheme(arsLevel, item.ars);
+        const isArsConsistent = Math.abs(arsRawTotal - item.ars) < 0.25;
+
+        const handleCopyMemory = () => {
+          const text = [
+            `=================================================================`,
+            `PULSO 2.0 — MEMÓRIA DE CÁLCULO & AUDITORIA DE FÓRMULAS`,
+            `Disciplina: ${item.name} (${item.code}) | Turma: ${item.classCode}`,
+            `Docente: ${item.professor} | Curso: ${item.course}`,
+            `Perfil de Pesos Ativo: ${weights.presetName || 'Padrão Estácio'}`,
+            `=================================================================`,
+            ``,
+            `1. LHI (Learning Health Index — Índice de Saúde Acadêmica)`,
+            `Fórmula: LHI = (w_apr × Aprendizagem) + (w_freq × Frequência) + (w_aprov × TaxaAprovação) + (w_lms × AdesãoLMS)`,
+            `• Grau de Aprendizagem: ${item.learningScore}% × ${(weights.lhi.learningScore * 100).toFixed(0)}% = +${lhiLearnContrib} pts`,
+            `• Frequência: ${item.attendanceRate}% × ${(weights.lhi.attendance * 100).toFixed(0)}% = +${lhiAttendContrib} pts`,
+            `• Taxa de Aprovação (100 - ${item.failureRate}%): ${passRate.toFixed(1)}% × ${(weights.lhi.passRate * 100).toFixed(0)}% = +${lhiPassContrib} pts`,
+            `• Adesão LMS: ${item.lmsAdherenceRate}% × ${(weights.lhi.lmsAdherence * 100).toFixed(0)}% = +${lhiLmsContrib} pts`,
+            `Somatório: ${lhiLearnContrib} + ${lhiAttendContrib} + ${lhiPassContrib} + ${lhiLmsContrib} = ${lhiRawTotal} pts`,
+            `LHI Final Apresentado: ${item.lhi.toFixed(1)} pts (${lhiStatus}) — ${isLhiConsistent ? 'Auditado com Sucesso' : 'Aviso: Divergência'}`,
+            ``,
+            `2. ARS (Academic Risk Score — Pontuação de Risco Acadêmico)`,
+            `Fórmula: ARS = (w_rep × Reprovação) + (w_infreq × Infrequência) + (w_def × DéficitAprend.) + (w_eva × RiscoEvasão)`,
+            `• Reprovação: ${item.failureRate}% × ${(weights.ars.failureRate * 100).toFixed(0)}% = +${arsFailContrib} pts`,
+            `• Infrequência (100 - ${item.attendanceRate}%): ${infrequency}% × ${(weights.ars.infrequency * 100).toFixed(0)}% = +${arsInfreqContrib} pts`,
+            `• Déficit de Aprendizagem (100 - ${item.learningScore}%): ${learningDeficit}% × ${(weights.ars.learningDeficit * 100).toFixed(0)}% = +${arsDeficitContrib} pts`,
+            `• Risco de Evasão: ${item.dropoutRiskRate}% × ${(weights.ars.dropoutRisk * 100).toFixed(0)}% = +${arsDropContrib} pts`,
+            `Somatório: ${arsFailContrib} + ${arsInfreqContrib} + ${arsDeficitContrib} + ${arsDropContrib} = ${arsRawTotal} pts`,
+            `ARS Final Apresentado: ${item.ars.toFixed(1)} pts (${arsLevel}) — ${isArsConsistent ? 'Auditado com Sucesso' : 'Aviso: Divergência'}`,
+            `=================================================================`
+          ].join('\n');
+
+          navigator.clipboard.writeText(text);
+          setCopiedFormula(true);
+          setTimeout(() => setCopiedFormula(false), 2200);
+        };
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs">
+            <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-5xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-xs">
+              
+              {/* Modal Top Navigation & Header */}
+              <div className="px-5 py-3.5 bg-gradient-to-r from-[#0A3977] via-[#0d478e] to-[#0A3977] text-white flex flex-wrap items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center">
+                    <Calculator className="w-4 h-4 text-cyan-300" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm sm:text-base font-bold text-white tracking-tight">
+                        Painel de Verificação de Cálculos (LHI & ARS)
+                      </h2>
+                      <span className="text-[10px] font-semibold bg-cyan-400/20 text-cyan-200 px-2 py-0.5 rounded border border-cyan-300/30">
+                        Transparência Matemática RF04
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-blue-100/90 mt-0.5">
+                      Memória descritiva passo a passo com pesos e fatores oficiais do Pulso 2.0
+                    </p>
+                  </div>
+                </div>
+
+                {/* Right controls: Quick Switcher, Navigation, Copy, Close */}
+                <div className="flex items-center gap-2">
+                  {/* Discipline Quick Selector Dropdown */}
+                  <div className="flex items-center gap-1 bg-white/10 rounded-lg p-1 border border-white/20">
+                    <button
+                      type="button"
+                      disabled={!hasPrev}
+                      onClick={() => hasPrev && setSelectedCalcDiscipline(filteredData[currentIndex - 1])}
+                      className="p-1 hover:bg-white/20 rounded disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                      title="Disciplina Anterior"
+                    >
+                      <ChevronLeft className="w-4 h-4 text-white" />
+                    </button>
+
+                    <select
+                      value={item.id}
+                      onChange={(e) => {
+                        const target = disciplines.find((d) => d.id === e.target.value);
+                        if (target) setSelectedCalcDiscipline(target);
+                      }}
+                      className="bg-transparent text-white text-[11px] font-medium py-1 px-1.5 focus:outline-hidden max-w-[200px] truncate cursor-pointer [&>option]:text-slate-900"
+                    >
+                      {filteredData.map((d, i) => (
+                        <option key={d.id} value={d.id}>
+                          {i + 1}. {d.name} ({d.code} - {d.classCode})
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      disabled={!hasNext}
+                      onClick={() => hasNext && setSelectedCalcDiscipline(filteredData[currentIndex + 1])}
+                      className="p-1 hover:bg-white/20 rounded disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                      title="Próxima Disciplina"
+                    >
+                      <ChevronRight className="w-4 h-4 text-white" />
+                    </button>
+                  </div>
+
+                  {/* Copy Memory Button */}
+                  <button
+                    type="button"
+                    onClick={handleCopyMemory}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white font-medium text-[11px] transition-colors cursor-pointer"
+                    title="Copiar texto da memória de cálculo para a área de transferência"
+                  >
+                    {copiedFormula ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-300" />
+                        <span className="text-emerald-200">Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copiar Memória</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Close Button */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCalcDiscipline(null)}
+                    className="p-1.5 hover:bg-white/20 rounded-lg text-white transition-colors cursor-pointer ml-1"
+                    title="Fechar painel"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Scrollable Content Body */}
+              <div className="p-4 sm:p-6 overflow-y-auto space-y-4">
+                
+                {/* Discipline Information Banner */}
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-extrabold text-sm text-slate-900">{item.name}</span>
+                      <span className="font-mono font-bold text-xs bg-blue-100 text-[#0A3977] px-2 py-0.5 rounded">
+                        {item.code}
+                      </span>
+                      <span className="text-slate-500 font-medium">Turma: {item.classCode}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 text-slate-600 text-[11px]">
+                      <span><strong>Docente:</strong> {item.professor}</span>
+                      <span>·</span>
+                      <span><strong>Curso:</strong> {item.course}</span>
+                      <span>·</span>
+                      <span><strong>Semestre:</strong> {item.semester}º ({item.shift})</span>
+                      <span>·</span>
+                      <span><strong>Alunos:</strong> {item.totalStudents}</span>
+                      <span>·</span>
+                      <span><strong>Tempo Estudo:</strong> {item.studyTimeFormatted || `${item.studyHoursPerWeek}h`}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 self-start md:self-center">
+                    <div className="px-3 py-1.5 bg-white border border-slate-200 rounded-md text-[11px] text-right">
+                      <div className="text-slate-400 text-[10px]">Perfil de Calibração</div>
+                      <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                        <Scale className="w-3.5 h-3.5 text-[#0A3977]" />
+                        <span>{weights.presetName || 'Padrão Estácio'}</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingItem({ ...item });
+                        setAuditNote(item.auditNote || '');
+                        setSelectedCalcDiscipline(null);
+                      }}
+                      className="px-3 py-1.5 bg-blue-50 text-[#0A3977] hover:bg-blue-100 border border-blue-200 rounded-md font-semibold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                      title="Editar métricas base desta disciplina"
+                    >
+                      <Edit3 className="w-3 h-3" />
+                      <span>Ajustar Dados</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* View Mode Switcher Pills */}
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold text-slate-600">Visualização:</span>
+                    <button
+                      type="button"
+                      onClick={() => setCalcViewMode('both')}
+                      className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                        calcViewMode === 'both'
+                          ? 'bg-[#0A3977] text-white shadow-xs'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      Ambas (LHI & ARS Lado a Lado)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCalcViewMode('lhi')}
+                      className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                        calcViewMode === 'lhi'
+                          ? 'bg-teal-700 text-white shadow-xs'
+                          : 'bg-teal-50 hover:bg-teal-100 text-teal-800'
+                      }`}
+                    >
+                      Apenas LHI (Saúde Acadêmica)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCalcViewMode('ars')}
+                      className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                        calcViewMode === 'ars'
+                          ? 'bg-rose-700 text-white shadow-xs'
+                          : 'bg-rose-50 hover:bg-rose-100 text-rose-900'
+                      }`}
+                    >
+                      Apenas ARS (Risco Acadêmico)
+                    </button>
+                  </div>
+
+                  <div className="text-[11px] text-slate-500 hidden sm:block">
+                    Matriz de Indicadores Pulso versão {weights.pulsoRuleVersion || '2.0'}
+                  </div>
+                </div>
+
+                {/* Grid for LHI and ARS calculation breakdowns */}
+                <div className={`grid gap-4 ${calcViewMode === 'both' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+                  
+                  {/* ============================================================== */}
+                  {/* CARD 1: LHI (Learning Health Index - Índice de Saúde)          */}
+                  {/* ============================================================== */}
+                  {(calcViewMode === 'both' || calcViewMode === 'lhi') && (
+                    <div className="border border-slate-200 rounded-xl bg-white shadow-xs overflow-hidden flex flex-col">
+                      {/* LHI Header */}
+                      <div className="p-3.5 bg-gradient-to-r from-teal-50 to-emerald-50/50 border-b border-teal-100 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-md bg-teal-600 text-white flex items-center justify-center font-bold text-xs">
+                            LHI
+                          </div>
+                          <div>
+                            <div className="font-extrabold text-sm text-teal-950">
+                              Learning Health Index (Saúde Acadêmica)
+                            </div>
+                            <div className="text-[10px] text-teal-700">
+                              Mede a higidez pedagógica da turma na escala de 0 a 100 pontos
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <div className={`text-xl font-black tabular-nums ${lhiHealthTheme.textColor}`}>
+                            {item.lhi.toFixed(1)} <span className="text-xs font-medium text-slate-500">pts</span>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${lhiHealthTheme.bgTint} ${lhiHealthTheme.textColor} border border-teal-200`}>
+                            {lhiStatus}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* LHI Formula Banner */}
+                      <div className="p-3 bg-slate-50/80 border-b border-slate-200 text-[11px] text-slate-700 space-y-1">
+                        <div className="font-bold text-[#0A3977] flex items-center justify-between">
+                          <span>Fórmula Oficial Aplicada:</span>
+                          <span className="font-mono text-[10px] text-slate-500">LHI = Σ (Pesoᵢ × Indicadorᵢ)</span>
+                        </div>
+                        <div className="font-mono bg-white p-2 rounded border border-slate-200 text-slate-800 text-[10px] sm:text-[11px] overflow-x-auto">
+                          LHI = ({weights.lhi.learningScore} × Aprendizagem) + ({weights.lhi.attendance} × Frequência) + ({weights.lhi.passRate} × TaxaAprovação) + ({weights.lhi.lmsAdherence} × AdesãoLMS)
+                        </div>
+                        <div className="text-[10px] text-slate-500 italic">
+                          * Nota: Taxa de Aprovação = max(0, 100% - Taxa de Reprovação). No Pulso 2.0, considera alunos com ao menos 1 prova (AV/NC/AVS).
+                        </div>
+                      </div>
+
+                      {/* LHI Step-by-Step Table */}
+                      <div className="p-3.5 space-y-3 flex-1">
+                        <div className="font-semibold text-slate-800 text-xs">
+                          Demonstrativo Detalhado de Componentes e Contribuições:
+                        </div>
+
+                        <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                          <table className="w-full text-left text-[11px] border-collapse">
+                            <thead>
+                              <tr className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                                <th className="p-2">Componente</th>
+                                <th className="p-2 text-right">Valor Base</th>
+                                <th className="p-2 text-right">Peso</th>
+                                <th className="p-2 text-right">Operação</th>
+                                <th className="p-2 text-right">Pontos</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {/* 1. Aprendizagem */}
+                              <tr className="hover:bg-slate-50/60">
+                                <td className="p-2">
+                                  <div className="font-bold text-slate-800">1. Grau de Aprendizagem</div>
+                                  <div className="text-[10px] text-slate-400">Provas com nota ≥ esperada</div>
+                                </td>
+                                <td className="p-2 text-right font-semibold tabular-nums text-slate-800">
+                                  {item.learningScore.toFixed(1)}%
+                                </td>
+                                <td className="p-2 text-right tabular-nums text-slate-600">
+                                  {(weights.lhi.learningScore * 100).toFixed(0)}%
+                                </td>
+                                <td className="p-2 text-right font-mono text-[10px] text-slate-500 tabular-nums">
+                                  {item.learningScore} × {weights.lhi.learningScore}
+                                </td>
+                                <td className="p-2 text-right font-bold tabular-nums text-emerald-700">
+                                  +{lhiLearnContrib.toFixed(2)}
+                                </td>
+                              </tr>
+
+                              {/* 2. Frequência */}
+                              <tr className="hover:bg-slate-50/60">
+                                <td className="p-2">
+                                  <div className="font-bold text-slate-800">2. Frequência Discente</div>
+                                  <div className="text-[10px] text-slate-400">Presenças / Total presenças+faltas</div>
+                                </td>
+                                <td className="p-2 text-right font-semibold tabular-nums text-slate-800">
+                                  {item.attendanceRate.toFixed(1)}%
+                                </td>
+                                <td className="p-2 text-right tabular-nums text-slate-600">
+                                  {(weights.lhi.attendance * 100).toFixed(0)}%
+                                </td>
+                                <td className="p-2 text-right font-mono text-[10px] text-slate-500 tabular-nums">
+                                  {item.attendanceRate} × {weights.lhi.attendance}
+                                </td>
+                                <td className="p-2 text-right font-bold tabular-nums text-emerald-700">
+                                  +{lhiAttendContrib.toFixed(2)}
+                                </td>
+                              </tr>
+
+                              {/* 3. Taxa de Aprovação */}
+                              <tr className="hover:bg-slate-50/60">
+                                <td className="p-2">
+                                  <div className="font-bold text-slate-800">3. Taxa de Aprovação</div>
+                                  <div className="text-[10px] text-slate-400">100% - Reprovação ({item.failureRate}%)</div>
+                                </td>
+                                <td className="p-2 text-right font-semibold tabular-nums text-slate-800">
+                                  {passRate.toFixed(1)}%
+                                </td>
+                                <td className="p-2 text-right tabular-nums text-slate-600">
+                                  {(weights.lhi.passRate * 100).toFixed(0)}%
+                                </td>
+                                <td className="p-2 text-right font-mono text-[10px] text-slate-500 tabular-nums">
+                                  {passRate.toFixed(1)} × {weights.lhi.passRate}
+                                </td>
+                                <td className="p-2 text-right font-bold tabular-nums text-emerald-700">
+                                  +{lhiPassContrib.toFixed(2)}
+                                </td>
+                              </tr>
+
+                              {/* 4. Adesão LMS */}
+                              <tr className="hover:bg-slate-50/60">
+                                <td className="p-2">
+                                  <div className="font-bold text-slate-800">4. Adesão ao LMS</div>
+                                  <div className="text-[10px] text-slate-400">Acessos conteúdo + Simulados SM</div>
+                                </td>
+                                <td className="p-2 text-right font-semibold tabular-nums text-slate-800">
+                                  {item.lmsAdherenceRate.toFixed(1)}%
+                                </td>
+                                <td className="p-2 text-right tabular-nums text-slate-600">
+                                  {(weights.lhi.lmsAdherence * 100).toFixed(0)}%
+                                </td>
+                                <td className="p-2 text-right font-mono text-[10px] text-slate-500 tabular-nums">
+                                  {item.lmsAdherenceRate} × {weights.lhi.lmsAdherence}
+                                </td>
+                                <td className="p-2 text-right font-bold tabular-nums text-emerald-700">
+                                  +{lhiLmsContrib.toFixed(2)}
+                                </td>
+                              </tr>
+                            </tbody>
+                            <tfoot>
+                              <tr className="bg-teal-50/80 font-bold border-t border-teal-200">
+                                <td colSpan={4} className="p-2 text-slate-800">
+                                  Somatório Final LHI (Total Calculado):
+                                </td>
+                                <td className="p-2 text-right tabular-nums text-sm text-teal-900">
+                                  {lhiRawTotal.toFixed(2)} pts
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+
+                        {/* Numerical expression representation */}
+                        <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 font-mono text-[11px] text-slate-700">
+                          <span className="text-slate-500 block text-[10px] font-sans font-semibold mb-0.5">
+                            Substituição Numérica Direta:
+                          </span>
+                          <span>LHI = {lhiLearnContrib.toFixed(2)} + {lhiAttendContrib.toFixed(2)} + {lhiPassContrib.toFixed(2)} + {lhiLmsContrib.toFixed(2)} = <strong>{lhiRawTotal.toFixed(2)}</strong></span>
+                          <span className="text-slate-500"> → Arredondamento oficial: <strong>{item.lhi.toFixed(1)}</strong></span>
+                        </div>
+
+                        {/* Health Progress Indicator */}
+                        <div className="space-y-1 pt-1">
+                          <div className="flex items-center justify-between text-[10px] text-slate-500 font-medium">
+                            <span>Crítico (&lt;55)</span>
+                            <span>Alerta (55-69)</span>
+                            <span>Saudável (70-84)</span>
+                            <span>Excelente (≥85)</span>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden relative">
+                            <div
+                              className={`h-full ${lhiHealthTheme.barColor}`}
+                              style={{ width: `${Math.min(100, Math.max(0, item.lhi))}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Audit Verification status */}
+                        <div className="flex items-center gap-1.5 text-[11px] pt-1">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span className="font-semibold text-emerald-800">
+                            Cálculo LHI Verificado:
+                          </span>
+                          <span className="text-slate-600">
+                            {isLhiConsistent
+                              ? '100% aderente ao valor exibido no grid e no relatório executivo.'
+                              : `Apresenta ajuste arredondado (${item.lhi} vs ${lhiRawTotal}).`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ============================================================== */}
+                  {/* CARD 2: ARS (Academic Risk Score - Pontuação de Risco)         */}
+                  {/* ============================================================== */}
+                  {(calcViewMode === 'both' || calcViewMode === 'ars') && (
+                    <div className="border border-slate-200 rounded-xl bg-white shadow-xs overflow-hidden flex flex-col">
+                      {/* ARS Header */}
+                      <div className={`p-3.5 bg-gradient-to-r from-rose-50 to-orange-50/50 border-b ${arsRiskTheme.borderTint} flex items-center justify-between`}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-md bg-rose-600 text-white flex items-center justify-center font-bold text-xs">
+                            ARS
+                          </div>
+                          <div>
+                            <div className="font-extrabold text-sm text-rose-950">
+                              Academic Risk Score (Pontuação de Risco)
+                            </div>
+                            <div className="text-[10px] text-rose-700">
+                              Mede a severidade do risco de retenção e evasão discente
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <div className={`text-xl font-black tabular-nums ${arsRiskTheme.textColor}`}>
+                            {item.ars.toFixed(1)} <span className="text-xs font-medium text-slate-500">pts</span>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${arsRiskTheme.bgTint} ${arsRiskTheme.textColor} border ${arsRiskTheme.borderTint}`}>
+                            {arsRiskTheme.label}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* ARS Formula Banner */}
+                      <div className="p-3 bg-slate-50/80 border-b border-slate-200 text-[11px] text-slate-700 space-y-1">
+                        <div className="font-bold text-[#0A3977] flex items-center justify-between">
+                          <span>Fórmula Oficial Aplicada:</span>
+                          <span className="font-mono text-[10px] text-slate-500">ARS = Σ (Pesoᵢ × FatorRiscoᵢ)</span>
+                        </div>
+                        <div className="font-mono bg-white p-2 rounded border border-slate-200 text-slate-800 text-[10px] sm:text-[11px] overflow-x-auto">
+                          ARS = ({weights.ars.failureRate} × Reprovação) + ({weights.ars.infrequency} × Infrequência) + ({weights.ars.learningDeficit} × DéficitAprendizagem) + ({weights.ars.dropoutRisk} × RiscoEvasão)
+                        </div>
+                        <div className="text-[10px] text-slate-500 italic">
+                          * Fatores inversos: Infrequência = max(0, 100% - Frequência); Déficit de Aprendizagem = max(0, 100% - Grau de Aprendizagem).
+                        </div>
+                      </div>
+
+                      {/* ARS Step-by-Step Table */}
+                      <div className="p-3.5 space-y-3 flex-1">
+                        <div className="font-semibold text-slate-800 text-xs">
+                          Demonstrativo Detalhado dos Fatores de Risco:
+                        </div>
+
+                        <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                          <table className="w-full text-left text-[11px] border-collapse">
+                            <thead>
+                              <tr className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                                <th className="p-2">Fator de Risco</th>
+                                <th className="p-2 text-right">Valor Base</th>
+                                <th className="p-2 text-right">Peso</th>
+                                <th className="p-2 text-right">Operação</th>
+                                <th className="p-2 text-right">Carga</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {/* 1. Reprovação */}
+                              <tr className="hover:bg-slate-50/60">
+                                <td className="p-2">
+                                  <div className="font-bold text-slate-800">1. Taxa de Reprovação</div>
+                                  <div className="text-[10px] text-slate-400">Pulso 2.0: avaliados com nota &lt; 6</div>
+                                </td>
+                                <td className="p-2 text-right font-semibold tabular-nums text-slate-800">
+                                  {item.failureRate.toFixed(1)}%
+                                </td>
+                                <td className="p-2 text-right tabular-nums text-slate-600">
+                                  {(weights.ars.failureRate * 100).toFixed(0)}%
+                                </td>
+                                <td className="p-2 text-right font-mono text-[10px] text-slate-500 tabular-nums">
+                                  {item.failureRate} × {weights.ars.failureRate}
+                                </td>
+                                <td className="p-2 text-right font-bold tabular-nums text-rose-700">
+                                  +{arsFailContrib.toFixed(2)}
+                                </td>
+                              </tr>
+
+                              {/* 2. Infrequência */}
+                              <tr className="hover:bg-slate-50/60">
+                                <td className="p-2">
+                                  <div className="font-bold text-slate-800">2. Infrequência (Faltas)</div>
+                                  <div className="text-[10px] text-slate-400">100% - Frequência ({item.attendanceRate}%)</div>
+                                </td>
+                                <td className="p-2 text-right font-semibold tabular-nums text-slate-800">
+                                  {infrequency.toFixed(1)}%
+                                </td>
+                                <td className="p-2 text-right tabular-nums text-slate-600">
+                                  {(weights.ars.infrequency * 100).toFixed(0)}%
+                                </td>
+                                <td className="p-2 text-right font-mono text-[10px] text-slate-500 tabular-nums">
+                                  {infrequency.toFixed(1)} × {weights.ars.infrequency}
+                                </td>
+                                <td className="p-2 text-right font-bold tabular-nums text-rose-700">
+                                  +{arsInfreqContrib.toFixed(2)}
+                                </td>
+                              </tr>
+
+                              {/* 3. Déficit de Aprendizagem */}
+                              <tr className="hover:bg-slate-50/60">
+                                <td className="p-2">
+                                  <div className="font-bold text-slate-800">3. Déficit de Aprendizagem</div>
+                                  <div className="text-[10px] text-slate-400">100% - Aprendizagem ({item.learningScore}%)</div>
+                                </td>
+                                <td className="p-2 text-right font-semibold tabular-nums text-slate-800">
+                                  {learningDeficit.toFixed(1)}%
+                                </td>
+                                <td className="p-2 text-right tabular-nums text-slate-600">
+                                  {(weights.ars.learningDeficit * 100).toFixed(0)}%
+                                </td>
+                                <td className="p-2 text-right font-mono text-[10px] text-slate-500 tabular-nums">
+                                  {learningDeficit.toFixed(1)} × {weights.ars.learningDeficit}
+                                </td>
+                                <td className="p-2 text-right font-bold tabular-nums text-rose-700">
+                                  +{arsDeficitContrib.toFixed(2)}
+                                </td>
+                              </tr>
+
+                              {/* 4. Risco de Evasão */}
+                              <tr className="hover:bg-slate-50/60">
+                                <td className="p-2">
+                                  <div className="font-bold text-slate-800">4. Risco de Evasão / Não Adesão</div>
+                                  <div className="text-[10px] text-slate-400">Não realização de AV/NC/AVS/SM</div>
+                                </td>
+                                <td className="p-2 text-right font-semibold tabular-nums text-slate-800">
+                                  {item.dropoutRiskRate.toFixed(1)}%
+                                </td>
+                                <td className="p-2 text-right tabular-nums text-slate-600">
+                                  {(weights.ars.dropoutRisk * 100).toFixed(0)}%
+                                </td>
+                                <td className="p-2 text-right font-mono text-[10px] text-slate-500 tabular-nums">
+                                  {item.dropoutRiskRate} × {weights.ars.dropoutRisk}
+                                </td>
+                                <td className="p-2 text-right font-bold tabular-nums text-rose-700">
+                                  +{arsDropContrib.toFixed(2)}
+                                </td>
+                              </tr>
+                            </tbody>
+                            <tfoot>
+                              <tr className="bg-rose-50/80 font-bold border-t border-rose-200">
+                                <td colSpan={4} className="p-2 text-slate-800">
+                                  Somatório Final ARS (Total de Risco Calculado):
+                                </td>
+                                <td className="p-2 text-right tabular-nums text-sm text-rose-950">
+                                  {arsRawTotal.toFixed(2)} pts
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+
+                        {/* Numerical expression representation */}
+                        <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 font-mono text-[11px] text-slate-700">
+                          <span className="text-slate-500 block text-[10px] font-sans font-semibold mb-0.5">
+                            Substituição Numérica Direta:
+                          </span>
+                          <span>ARS = {arsFailContrib.toFixed(2)} + {arsInfreqContrib.toFixed(2)} + {arsDeficitContrib.toFixed(2)} + {arsDropContrib.toFixed(2)} = <strong>{arsRawTotal.toFixed(2)}</strong></span>
+                          <span className="text-slate-500"> → Arredondamento oficial: <strong>{item.ars.toFixed(1)}</strong></span>
+                        </div>
+
+                        {/* Risk Severity Progress Indicator */}
+                        <div className="space-y-1 pt-1">
+                          <div className="flex items-center justify-between text-[10px] text-slate-500 font-medium">
+                            <span>Baixo (&lt;25)</span>
+                            <span>Moderado (25-44)</span>
+                            <span>Alto (45-64)</span>
+                            <span>Crítico (≥65)</span>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden relative">
+                            <div
+                              className={`h-full ${arsRiskTheme.barColor}`}
+                              style={{ width: `${Math.min(100, Math.max(0, item.ars))}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Audit Verification status */}
+                        <div className="flex items-center gap-1.5 text-[11px] pt-1">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span className="font-semibold text-emerald-800">
+                            Cálculo ARS Verificado:
+                          </span>
+                          <span className="text-slate-600">
+                            {isArsConsistent
+                              ? '100% aderente ao valor exibido no grid e no relatório executivo.'
+                              : `Apresenta ajuste arredondado (${item.ars} vs ${arsRawTotal}).`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Pedagogical Action & Governance Section */}
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+                      <BookOpen className="w-4 h-4 text-[#0A3977]" />
+                      <span>Diagnóstico Pedagógico e Ação Recomendada:</span>
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      Acionado pelo cruzamento de ARS ({item.ars.toFixed(1)}) e LHI ({item.lhi.toFixed(1)})
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-lg bg-amber-50/90 border border-amber-200 text-amber-950 font-medium text-xs leading-relaxed">
+                    {item.recommendedAction}
+                  </div>
+                  {item.auditNote && (
+                    <div className="text-[11px] text-slate-600 bg-white p-2.5 rounded border border-slate-200 font-mono">
+                      <strong>Nota de Auditoria:</strong> &ldquo;{item.auditNote}&rdquo; (Atualizado em {item.lastUpdated})
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+              {/* Modal Footer Controls */}
+              <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>Auditoria transparente em conformidade com o modelo matemático do Pulso Acadêmico 2.0.</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyMemory}
+                    className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-semibold rounded-md transition-colors cursor-pointer text-xs flex items-center gap-1.5"
+                  >
+                    {copiedFormula ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+                    <span>{copiedFormula ? 'Copiado!' : 'Copiar Memória de Cálculo'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCalcDiscipline(null)}
+                    className="px-4 py-1.5 bg-[#0A3977] text-white font-semibold rounded-md hover:bg-blue-800 transition-colors cursor-pointer text-xs"
+                  >
+                    Fechar Verificação
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
