@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   FileSpreadsheet, 
   Presentation, 
@@ -10,7 +10,9 @@ import {
   FileDown,
   Loader2,
   FileText,
-  AlertCircle
+  AlertCircle,
+  ChevronDown,
+  Printer
 } from 'lucide-react';
 import { DisciplineMetric, SystemConfig, ImportSession } from '../types';
 import { exportAnalyticalWorkbook, exportPowerPointDeck, exportConfigFile } from '../utils/calculations';
@@ -37,6 +39,19 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Settings form state
   const [institutionName, setInstitutionName] = useState(config.institutionName);
@@ -138,16 +153,97 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Header bar (no-print) */}
-      <div className="no-print flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+      <div className="no-print flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-slate-200">
         <div>
-          <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+          <div className="flex items-center gap-2 text-xs text-slate-500 mb-0.5">
             <span>Reporting Layer & Governança Corporativa</span>
             <span aria-hidden="true">·</span>
             <span>Widescreen 16:9, Impressão & Exportação PDF</span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
             Central de Emissão de Relatórios & Apresentações
           </h1>
+        </div>
+
+        {/* Objeto Botão "Exportar Relatórios" movido para dentro do menu Relatórios */}
+        <div className="relative shrink-0" ref={exportMenuRef}>
+          <button
+            onClick={() => setShowExportMenu(!showExportMenu)}
+            className="flex items-center gap-2 px-3.5 sm:px-4 py-2 text-xs font-bold text-slate-950 bg-gradient-to-r from-[#FFB800] via-[#FFAE00] to-[#FF9F00] hover:brightness-105 active:scale-95 rounded-lg transition-all shadow-md cursor-pointer whitespace-nowrap"
+            title="Exportar relatórios em PDF, Excel ou PowerPoint"
+          >
+            <Download className="w-4 h-4 text-slate-950 shrink-0" />
+            <span>Exportar Relatórios</span>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-950/70 shrink-0" />
+          </button>
+
+          {showExportMenu && (
+            <div 
+              className="absolute right-0 mt-2 w-72 p-2 bg-white text-slate-800 rounded-xl shadow-2xl border border-slate-200 z-50 animate-in fade-in zoom-in-95 duration-100 text-xs"
+              onClick={() => setShowExportMenu(false)}
+            >
+              <div className="px-2.5 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 flex items-center justify-between">
+                <span>Saídas Oficiais & Governança</span>
+                <span className="text-[#0A3977] font-semibold">Pulso 2.0</span>
+              </div>
+
+              <div className="mt-1 space-y-1">
+                <button
+                  onClick={handleSavePdf}
+                  className="w-full flex items-start gap-2.5 p-2 rounded-lg hover:bg-slate-50 transition-colors text-left cursor-pointer group"
+                >
+                  <div className="w-8 h-8 rounded-md bg-blue-50 text-[#0A3977] flex items-center justify-center shrink-0 group-hover:bg-[#0A3977] group-hover:text-white transition-colors">
+                    <Printer className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                      <span>Relatório Executivo PDF</span>
+                      <span className="text-[9px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.2 rounded">A4 / 16:9</span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      Layout paisagem com qualidade vetorial e visual oficial
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleExportExcel}
+                  className="w-full flex items-start gap-2.5 p-2 rounded-lg hover:bg-slate-50 transition-colors text-left cursor-pointer group"
+                >
+                  <div className="w-8 h-8 rounded-md bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                    <FileSpreadsheet className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                      <span>Planilha Analítica (.xlsx)</span>
+                      <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded">Excel</span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      Caderno com 3 abas, fórmulas e matriz de risco
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleExportPPTX}
+                  className="w-full flex items-start gap-2.5 p-2 rounded-lg hover:bg-slate-50 transition-colors text-left cursor-pointer group"
+                >
+                  <div className="w-8 h-8 rounded-md bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                    <Presentation className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                      <span>Apresentação PowerPoint (.pptx)</span>
+                      <span className="text-[9px] bg-indigo-100 text-indigo-800 font-bold px-1.5 py-0.2 rounded">16:9</span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      Deck executivo corporativo no padrão Estácio
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -196,36 +292,36 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-4">
           {/* PDF CARD */}
-          <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs flex flex-col justify-between">
+          <div className="bg-white border border-slate-200 rounded-lg p-3.5 sm:p-4 shadow-xs flex flex-col justify-between">
             <div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2.5 rounded-lg bg-rose-50 text-rose-700">
-                  <FileText className="w-6 h-6" />
+              <div className="flex items-center gap-2.5 mb-2.5">
+                <div className="p-2 rounded-lg bg-rose-50 text-rose-700">
+                  <FileText className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900">
                     Relatório em PDF (.pdf)
                   </h3>
-                  <p className="text-xs text-slate-500">
-                    Captura gráfica vetorial/raster de alta resolução (html2canvas + jsPDF)
+                  <p className="text-[11px] text-slate-500">
+                    Captura gráfica vetorial de alta resolução
                   </p>
                 </div>
               </div>
 
-              <ul className="space-y-2 text-xs text-slate-600 my-4 border-y border-slate-100 py-3">
+              <ul className="space-y-1.5 text-xs text-slate-600 my-3 border-y border-slate-100 py-2.5">
                 <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                  <span><strong>Widescreen 16:9:</strong> Enquadramento automático no padrão paisagem</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
+                  <span><strong>Widescreen 16:9:</strong> Enquadramento paisagem</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                  <span><strong>Design Oficial:</strong> Todas as cores, banners, logos e métricas preservados</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
+                  <span><strong>Design Oficial:</strong> Cores, banners e logos</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                  <span><strong>Download Imediato:</strong> Não requer configuração manual de impressora</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
+                  <span><strong>Download Direto:</strong> Não requer impressora</span>
                 </li>
               </ul>
             </div>
@@ -233,16 +329,16 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
             <button
               onClick={handleSavePdf}
               disabled={isExportingPdf}
-              className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-white bg-rose-700 hover:bg-rose-600 disabled:opacity-60 rounded-md transition-colors shadow-xs cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-2 text-xs font-semibold text-white bg-rose-700 hover:bg-rose-600 disabled:opacity-60 rounded-md transition-colors shadow-xs cursor-pointer"
             >
               {isExportingPdf ? (
                 <>
-                  <Loader2 className="w-4 h-4 text-white animate-spin" />
+                  <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
                   <span>Gerando PDF...</span>
                 </>
               ) : (
                 <>
-                  <FileDown className="w-4 h-4" />
+                  <FileDown className="w-3.5 h-3.5" />
                   <span>Baixar Arquivo PDF (.pdf)</span>
                 </>
               )}
@@ -250,34 +346,34 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
           </div>
 
           {/* EXCEL CARD */}
-          <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs flex flex-col justify-between">
+          <div className="bg-white border border-slate-200 rounded-lg p-3.5 sm:p-4 shadow-xs flex flex-col justify-between">
             <div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2.5 rounded-lg bg-emerald-50 text-emerald-700">
-                  <FileSpreadsheet className="w-6 h-6" />
+              <div className="flex items-center gap-2.5 mb-2.5">
+                <div className="p-2 rounded-lg bg-emerald-50 text-emerald-700">
+                  <FileSpreadsheet className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900">
                     Planilha Analítica (.xlsx)
                   </h3>
-                  <p className="text-xs text-slate-500">
-                    Caderno com fórmulas abertas, matriz de risco e sumário
+                  <p className="text-[11px] text-slate-500">
+                    Caderno com 3 abas, fórmulas e matriz de risco
                   </p>
                 </div>
               </div>
 
-              <ul className="space-y-2 text-xs text-slate-600 my-4 border-y border-slate-100 py-3">
+              <ul className="space-y-1.5 text-xs text-slate-600 my-3 border-y border-slate-100 py-2.5">
                 <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
                   <span><strong>Aba 1 - Sumário:</strong> KPIs consolidados</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
                   <span><strong>Aba 2 - Auditoria:</strong> {disciplines.length} turmas mapeadas</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                  <span><strong>Aba 3 - Matriz de Risco:</strong> ARS &ge; 50</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                  <span><strong>Aba 3 - Matriz Risco:</strong> ARS com alertas</span>
                 </li>
               </ul>
             </div>
@@ -285,42 +381,42 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
             <button
               onClick={handleExportExcel}
               disabled={isExportingExcel}
-              className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-600 rounded-md transition-colors shadow-xs cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-2 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-600 rounded-md transition-colors shadow-xs cursor-pointer"
             >
-              <Download className="w-4 h-4" />
+              <Download className="w-3.5 h-3.5" />
               <span>{isExportingExcel ? 'Gerando Planilha...' : 'Baixar Caderno (.xlsx)'}</span>
             </button>
           </div>
 
           {/* POWERPOINT CARD */}
-          <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs flex flex-col justify-between">
+          <div className="bg-white border border-slate-200 rounded-lg p-3.5 sm:p-4 shadow-xs flex flex-col justify-between">
             <div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2.5 rounded-lg bg-blue-50 text-blue-700">
-                  <Presentation className="w-6 h-6" />
+              <div className="flex items-center gap-2.5 mb-2.5">
+                <div className="p-2 rounded-lg bg-blue-50 text-blue-700">
+                  <Presentation className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900">
                     Apresentação (.pptx)
                   </h3>
-                  <p className="text-xs text-slate-500">
-                    Layout 16:9 corporativo com cartões de indicadores e tabelas
+                  <p className="text-[11px] text-slate-500">
+                    Layout 16:9 corporativo com cartões e tabelas
                   </p>
                 </div>
               </div>
 
-              <ul className="space-y-2 text-xs text-slate-600 my-4 border-y border-slate-100 py-3">
+              <ul className="space-y-1.5 text-xs text-slate-600 my-3 border-y border-slate-100 py-2.5">
                 <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                  <span><strong>Deck Executivo:</strong> 8 slides widescreen 16:9 no padrão Estácio</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
+                  <span><strong>Deck Executivo:</strong> 8 slides 16:9 Estácio</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                  <span><strong>Data Storytelling:</strong> Real vs. Metas (Aprendizagem, Frequência, Reprovação)</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
+                  <span><strong>Data Storytelling:</strong> Real vs. Metas</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                  <span><strong>Governança:</strong> Plano de ação tático (01 a 04) e apêndice auditado</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
+                  <span><strong>Governança:</strong> Plano tático e apêndice</span>
                 </li>
               </ul>
             </div>
@@ -328,9 +424,9 @@ export const ReportingView: React.FC<ReportingViewProps> = ({
             <button
               onClick={handleExportPPTX}
               disabled={isExportingPptx}
-              className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-md transition-colors shadow-xs cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-md transition-colors shadow-xs cursor-pointer"
             >
-              <Download className="w-4 h-4" />
+              <Download className="w-3.5 h-3.5" />
               <span>{isExportingPptx ? 'Gerando Slides...' : 'Baixar Apresentação (.pptx)'}</span>
             </button>
           </div>

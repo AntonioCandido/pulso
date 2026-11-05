@@ -1615,34 +1615,34 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
         };
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs">
-            <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-5xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-xs">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-xs">
               
               {/* Modal Top Navigation & Header */}
-              <div className="px-5 py-3.5 bg-gradient-to-r from-[#0A3977] via-[#0d478e] to-[#0A3977] text-white flex flex-wrap items-center justify-between gap-3 shrink-0">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center">
+              <div className="px-3.5 sm:px-5 py-2.5 sm:py-3 bg-gradient-to-r from-[#0A3977] via-[#0d478e] to-[#0A3977] text-white flex flex-wrap items-center justify-between gap-2.5 shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center">
                     <Calculator className="w-4 h-4 text-cyan-300" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h2 className="text-sm sm:text-base font-bold text-white tracking-tight">
+                      <h2 className="text-xs sm:text-sm font-bold text-white tracking-tight">
                         Painel de Verificação de Cálculos (LHI & ARS)
                       </h2>
-                      <span className="text-[10px] font-semibold bg-cyan-400/20 text-cyan-200 px-2 py-0.5 rounded border border-cyan-300/30">
+                      <span className="text-[9px] sm:text-[10px] font-semibold bg-cyan-400/20 text-cyan-200 px-1.5 py-0.2 rounded border border-cyan-300/30">
                         Transparência Matemática RF04
                       </span>
                     </div>
-                    <p className="text-[11px] text-blue-100/90 mt-0.5">
+                    <p className="text-[10px] sm:text-[11px] text-blue-100/90">
                       Memória descritiva passo a passo com pesos e fatores oficiais do Pulso 2.0
                     </p>
                   </div>
                 </div>
 
                 {/* Right controls: Quick Switcher, Navigation, Copy, Close */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   {/* Discipline Quick Selector Dropdown */}
-                  <div className="flex items-center gap-1 bg-white/10 rounded-lg p-1 border border-white/20">
+                  <div className="flex items-center gap-1 bg-white/10 rounded-lg p-0.5 sm:p-1 border border-white/20">
                     <button
                       type="button"
                       disabled={!hasPrev}
@@ -1650,7 +1650,7 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                       className="p-1 hover:bg-white/20 rounded disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
                       title="Disciplina Anterior"
                     >
-                      <ChevronLeft className="w-4 h-4 text-white" />
+                      <ChevronLeft className="w-3.5 h-3.5 text-white" />
                     </button>
 
                     <select
@@ -1659,7 +1659,7 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                         const target = disciplines.find((d) => d.id === e.target.value);
                         if (target) setSelectedCalcDiscipline(target);
                       }}
-                      className="bg-transparent text-white text-[11px] font-medium py-1 px-1.5 focus:outline-hidden max-w-[200px] truncate cursor-pointer [&>option]:text-slate-900"
+                      className="bg-transparent text-white text-[10px] sm:text-[11px] font-medium py-0.5 px-1 focus:outline-hidden max-w-[180px] sm:max-w-[200px] truncate cursor-pointer [&>option]:text-slate-900"
                     >
                       {filteredData.map((d, i) => (
                         <option key={d.id} value={d.id}>
@@ -1675,7 +1675,7 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                       className="p-1 hover:bg-white/20 rounded disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
                       title="Próxima Disciplina"
                     >
-                      <ChevronRight className="w-4 h-4 text-white" />
+                      <ChevronRight className="w-3.5 h-3.5 text-white" />
                     </button>
                   </div>
 
@@ -1683,17 +1683,17 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                   <button
                     type="button"
                     onClick={handleCopyMemory}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white font-medium text-[11px] transition-colors cursor-pointer"
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white font-medium text-[10px] sm:text-[11px] transition-colors cursor-pointer"
                     title="Copiar texto da memória de cálculo para a área de transferência"
                   >
                     {copiedFormula ? (
                       <>
-                        <Check className="w-3.5 h-3.5 text-emerald-300" />
+                        <Check className="w-3 h-3 text-emerald-300" />
                         <span className="text-emerald-200">Copiado!</span>
                       </>
                     ) : (
                       <>
-                        <Copy className="w-3.5 h-3.5" />
+                        <Copy className="w-3 h-3" />
                         <span>Copiar Memória</span>
                       </>
                     )}
@@ -1703,7 +1703,7 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setSelectedCalcDiscipline(null)}
-                    className="p-1.5 hover:bg-white/20 rounded-lg text-white transition-colors cursor-pointer ml-1"
+                    className="p-1 hover:bg-white/20 rounded-lg text-white transition-colors cursor-pointer ml-0.5"
                     title="Fechar painel"
                   >
                     <X className="w-4 h-4" />
@@ -1712,10 +1712,10 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
               </div>
 
               {/* Scrollable Content Body */}
-              <div className="p-4 sm:p-6 overflow-y-auto space-y-4">
+              <div className="p-3 sm:p-4 overflow-y-auto space-y-3">
                 
                 {/* Discipline Information Banner */}
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 sm:p-3 flex flex-col md:flex-row md:items-center justify-between gap-2.5 text-xs">
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-extrabold text-sm text-slate-900">{item.name}</span>

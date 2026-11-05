@@ -1429,7 +1429,7 @@ export const INITIAL_DISCIPLINES: DisciplineMetric[] = [];
 export const INITIAL_SYSTEM_CONFIG: SystemConfig = {
   institutionName: 'YDUQS / ESTÁCIO - Coordenação de TI',
   academicPeriod: '2026.1 (Entrada 1 a 3)',
-  coordinatorName: 'Prof. Dr. Antônio Cândido',
+  coordinatorName: 'Prof. Antônio Cândido',
   coordinatorEmail: 'antoniocandidorj@gmail.com',
   exportFormatPreference: 'both',
   biConnections: [

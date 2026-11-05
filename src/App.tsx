@@ -83,6 +83,10 @@ export default function App() {
             pulsoRuleVersion: '2.0',
           };
         }
+        // Ensure coordinatorName matches requested "Prof. Antônio Cândido"
+        if (!parsed.coordinatorName || parsed.coordinatorName.includes('Dr.') || parsed.coordinatorName === 'Prof. Cândido') {
+          parsed.coordinatorName = 'Prof. Antônio Cândido';
+        }
         return parsed;
       }
     } catch (e) {
@@ -235,7 +239,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-2.5 sm:p-4 lg:p-5">
         {activeTab === 'dashboard' && (
           <DashboardView
             disciplines={disciplines}
@@ -293,8 +297,8 @@ export default function App() {
       </main>
 
       {/* Executive Footer */}
-      <footer className="border-t border-slate-200 bg-white py-4 px-6 text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+      <footer className="border-t border-slate-200 bg-white py-3 px-4 sm:px-6 text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-slate-700">Pulso Acadêmico</span>
             <span aria-hidden="true">·</span>
@@ -303,7 +307,7 @@ export default function App() {
             <span>{config.institutionName}</span>
           </div>
 
-          <div className="flex items-center gap-4 text-slate-400">
+          <div className="flex items-center gap-3 text-slate-400">
             <span>Período {config.academicPeriod}</span>
             <span aria-hidden="true">·</span>
             <span>Coordenação: {config.coordinatorName}</span>

@@ -13,8 +13,7 @@ import {
   CheckCircle2, 
   FileSpreadsheet,
   Download,
-  Database,
-  Printer
+  Database
 } from 'lucide-react';
 import { DisciplineMetric, SystemConfig, AcademicCourse, ImportSession } from '../types';
 import { ExecutiveDashboardCanvas } from './ExecutiveDashboardCanvas';
@@ -235,12 +234,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 sm:space-y-4">
       {/* Top Utility & Control Bar */}
-      <div className="no-print flex flex-wrap items-center justify-between gap-3 text-xs bg-white p-3.5 rounded-lg border border-slate-200 shadow-xs">
-        <div className="flex flex-wrap items-center gap-2.5">
+      <div className="no-print flex flex-wrap items-center justify-between gap-2.5 text-xs bg-white py-2 px-3 sm:px-3.5 rounded-lg border border-slate-200 shadow-xs">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="font-bold text-slate-700">Campus em Exibição:</span>
-          <span className={`px-2.5 py-1 rounded font-semibold border ${
+          <span className={`px-2 py-0.5 rounded font-semibold border text-xs ${
             hasData 
               ? 'bg-blue-50 text-[#0A3977] border-blue-200' 
               : 'bg-slate-100 text-slate-500 border-slate-200'
@@ -248,19 +247,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {campusLabel}
           </span>
           {hasData ? (
-            <span className="text-slate-500 hidden sm:inline">
+            <span className="text-slate-500 hidden sm:inline text-[11px]">
               · {totalDisciplines} turmas · {totalStudents} alunos matriculados
             </span>
           ) : (
-            <span className="text-slate-400 hidden sm:inline">
+            <span className="text-slate-400 hidden sm:inline text-[11px]">
               · Nenhuma turma carregada
             </span>
           )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-md border border-slate-200">
-            <span className="text-[11px] text-slate-500 font-semibold">Fonte Ativa:</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-slate-100 rounded-md border border-slate-200">
+            <span className="text-[10px] text-slate-500 font-semibold">Fonte Ativa:</span>
             <span className="text-[11px] font-bold text-slate-800">
               {hasData ? (activeSession?.fileName || primaryDiscipline?.sourceFileOrUrl || 'Arquivo Importado') : 'Nenhuma Fonte (Base Limpa)'}
             </span>
@@ -271,16 +270,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           }`}>
             {hasData ? 'Base Ativa' : 'Base Zerada'}
           </span>
-
-          <button
-            type="button"
-            onClick={() => window.print()}
-            title="Gerar versão em PDF ou impressa deste relatório executivo (A4 Paisagem)"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0A3977] hover:bg-[#082e60] text-white font-semibold text-xs rounded-md shadow-xs transition-colors cursor-pointer border border-[#082e60]"
-          >
-            <Printer className="w-3.5 h-3.5 text-[#FFB800]" />
-            <span>Exportar PDF</span>
-          </button>
         </div>
       </div>
 
@@ -295,8 +284,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Context Pedagogical Notes */}
-      <div className="no-print grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-xs flex flex-col justify-between">
+      <div className="no-print grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+        <div className="bg-white p-3 sm:p-3.5 rounded-lg border border-slate-200 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-2 font-bold text-slate-800 mb-1">
               <Clock className="w-4 h-4 text-blue-600" />
@@ -321,7 +310,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         </div>
 
-        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-xs flex flex-col justify-between">
+        <div className="bg-white p-3 sm:p-3.5 rounded-lg border border-slate-200 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-2 font-bold text-slate-800 mb-1">
               <Calendar className="w-4 h-4 text-blue-600" />
@@ -346,7 +335,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         </div>
 
-        <div className={`p-4 rounded-lg border shadow-xs flex flex-col justify-between transition-colors ${
+        <div className={`p-3 sm:p-3.5 rounded-lg border shadow-xs flex flex-col justify-between transition-colors ${
           !hasData
             ? 'bg-white border-slate-200'
             : highRiskDisciplines.length > 0

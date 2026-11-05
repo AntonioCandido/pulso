@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clock, Calendar, MapPin, Database, Info, X, AlertTriangle, CheckCircle2, ShieldAlert, Lightbulb, Printer } from 'lucide-react';
+import { Clock, Calendar, MapPin, Database, Info, X, AlertTriangle, CheckCircle2, ShieldAlert, Lightbulb } from 'lucide-react';
 import { DisciplineMetric, SystemConfig, ImportSession } from '../types';
 
 export interface ExecutiveDashboardCanvasProps {
@@ -350,33 +350,30 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
   return (
     <div className={`bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden font-sans print:shadow-none print:border-none print:rounded-none ${isPrintMode ? 'w-full' : ''}`}>
       {/* 1. Executive Top Header Banner (Deep Blue with Gold Accent) */}
-      <div className="relative bg-[#0A3977] text-white px-6 py-5 overflow-hidden border-b-4 border-[#FFB800] print:py-4">
+      <div className="relative bg-[#0A3977] text-white px-4 sm:px-6 py-3 sm:py-3.5 overflow-hidden border-b-4 border-[#FFB800] print:py-2.5">
         {/* Subtle geometric diamond watermark on top right */}
-        <div className="absolute right-3 top-3 opacity-15 pointer-events-none hidden sm:block">
-          <svg width="90" height="90" viewBox="0 0 100 100" fill="none">
+        <div className="absolute right-3 top-2.5 opacity-15 pointer-events-none hidden sm:block">
+          <svg width="75" height="75" viewBox="0 0 100 100" fill="none">
             <polygon points="50,5 95,50 50,95 5,50" stroke="#38BDF8" strokeWidth="6" />
             <line x1="50" y1="5" x2="50" y2="95" stroke="#38BDF8" strokeWidth="4" />
             <line x1="5" y1="50" x2="95" y2="50" stroke="#38BDF8" strokeWidth="4" />
           </svg>
         </div>
 
-        <div className="relative z-10 flex flex-col md:flex-row print:flex-row md:items-center print:items-center justify-between gap-4">
-          {/* Title Hierarchy with exact 31px font size requested */}
+        <div className="relative z-10 flex flex-col md:flex-row print:flex-row md:items-center print:items-center justify-between gap-2.5 sm:gap-4">
+          {/* Title Hierarchy - Executive and well-proportioned */}
           <div>
-            <h1 
-              style={{ fontSize: '31px' }}
-              className="text-[31px] font-black tracking-tight text-[#FFB800] uppercase font-sans leading-none"
-            >
+            <h1 className="text-2xl sm:text-[27px] font-black tracking-tight text-[#FFB800] uppercase font-sans leading-none">
               PULSO ACADÊMICO
             </h1>
-            <h2 className="text-base sm:text-lg font-bold tracking-wide text-white uppercase mt-1">
+            <h2 className="text-xs sm:text-sm font-bold tracking-wide text-white uppercase mt-0.5">
               {courseLabel}
             </h2>
           </div>
 
           {/* Slide Metadata & Actions */}
-          <div className="flex flex-col sm:flex-row md:flex-col print:flex-row items-start sm:items-center md:items-end print:items-end justify-between gap-3">
-            <div className="text-xs space-y-1 text-slate-100/90 font-medium md:text-right print:text-right">
+          <div className="flex flex-col sm:flex-row md:flex-col print:flex-row items-start sm:items-center md:items-end print:items-end justify-between gap-1.5 sm:gap-2">
+            <div className="text-[11px] sm:text-xs space-y-0.5 text-slate-100/90 font-medium md:text-right print:text-right">
               <div className="flex items-center md:justify-end print:justify-end gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-[#38BDF8]" />
                 <span className="font-semibold text-white">{campusLabel}</span>
@@ -385,51 +382,38 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
                 <Calendar className="w-3.5 h-3.5 text-[#38BDF8]" />
                 <span>{hasData ? (executive?.entryYear ? `Ano Entrada: ${executive.entryYear} · Período ${config.academicPeriod}` : `Período ${config.academicPeriod}`) : 'Período --'}</span>
               </div>
-              <div className="flex items-center md:justify-end print:justify-end gap-1.5 text-white/80 text-[11px]">
+              <div className="flex items-center md:justify-end print:justify-end gap-1.5 text-white/80 text-[10px] sm:text-[11px]">
                 <Clock className="w-3 h-3 text-[#38BDF8]" />
                 <span>{lastUpdatedText}</span>
               </div>
-            </div>
-
-            {/* Quick Export PDF / Print Button for the Executive Report */}
-            <div className="no-print">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                title="Gerar versão em PDF ou impressa deste relatório executivo (A4 Paisagem)"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#FFB800] hover:bg-[#FFA500] text-slate-950 font-bold text-xs rounded-md shadow-sm transition-all duration-150 hover:shadow-md cursor-pointer active:scale-95 border border-[#e5a600]"
-              >
-                <Printer className="w-3.5 h-3.5 text-slate-950" />
-                <span>Exportar PDF</span>
-              </button>
             </div>
           </div>
         </div>
       </div>
 
       {/* 2. Responsive KPI Grid System */}
-      <div className="p-6 bg-[#F4F7FA] space-y-5 print:p-4 print:space-y-4">
+      <div className="p-3 sm:p-4 md:p-4.5 bg-[#F4F7FA] space-y-3 sm:space-y-3.5 print:p-3 print:space-y-2.5">
         {/* Primary Hero Indicators Row (2 equal-height responsive columns) */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 print:grid-cols-2 print:gap-4 items-stretch">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-3.5 print:grid-cols-2 print:gap-2.5 items-stretch">
           
           {/* HERO CARD 1: TEMPO DE ESTUDO */}
           <div 
-            className="h-full bg-white rounded-xl p-5 border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:shadow-md print:shadow-none"
+            className="h-full bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 transition-all hover:shadow-md print:shadow-none"
             title="Tempo de Estudo (Pulso 1.0 / 2.0): Tempo de navegação no conteúdo da disciplina + 52' para cada download realizado."
           >
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-[#EBF3FB] border-2 border-[#BCD7F2] flex items-center justify-center text-[#0A3977] shrink-0">
-                <Clock className="w-7 h-7" />
+            <div className="flex items-center gap-3 sm:gap-3.5">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-[#EBF3FB] border-2 border-[#BCD7F2] flex items-center justify-center text-[#0A3977] shrink-0">
+                <Clock className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <div>
-                <span className="text-xs font-black tracking-wider text-slate-700 uppercase block">
+                <span className="text-[11px] sm:text-xs font-black tracking-wider text-slate-700 uppercase block">
                   TEMPO DE ESTUDO
                 </span>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <span className="text-4xl font-extrabold text-[#0A3977] tracking-tight tabular-nums font-sans print:text-3xl">
+                <div className="flex items-baseline gap-1.5 mt-0.5">
+                  <span className="text-2xl sm:text-3xl font-black text-[#0A3977] tracking-tight tabular-nums font-sans print:text-2xl">
                     {studyTimeDisplay}
                   </span>
-                  <span className="text-sm font-bold text-slate-500">
+                  <span className="text-xs font-bold text-slate-500">
                     hh:mm
                   </span>
                 </div>
@@ -437,18 +421,18 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
             </div>
 
             {/* Indicator & comparison */}
-            <div className="sm:text-right flex flex-col sm:items-end justify-center border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100">
-              <div className={`flex items-center gap-1.5 font-extrabold text-lg sm:text-xl tabular-nums ${
+            <div className="sm:text-right flex flex-col sm:items-end justify-center border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
+              <div className={`flex items-center gap-1 font-black text-base sm:text-lg tabular-nums ${
                 !hasData 
                   ? 'text-slate-400' 
                   : studyTimeIsPositive === false 
                   ? 'text-rose-600' 
                   : 'text-emerald-600'
               }`}>
-                <span className="text-[22px]">{!hasData ? '—' : studyTimeIsPositive === false ? '▼' : '▲'}</span>
-                <span className="text-[22px]">{studyTimeDiff}</span>
+                <span className="text-lg sm:text-xl">{!hasData ? '—' : studyTimeIsPositive === false ? '▼' : '▲'}</span>
+                <span className="text-lg sm:text-xl">{studyTimeDiff}</span>
               </div>
-              <div className={`text-xs font-bold tabular-nums ${
+              <div className={`text-[11px] font-bold tabular-nums ${
                 !hasData 
                   ? 'text-slate-400' 
                   : studyTimeIsPositive === false 
@@ -457,11 +441,11 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
               }`}>
                 {studyTimeDiffPercent}
               </div>
-              <div className="text-[11px] text-slate-500 font-medium mt-1 tabular-nums">
+              <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium mt-0.5 tabular-nums">
                 {studyTimePreviousYear}
               </div>
               {hasData && (
-                <div className="text-[11px] text-slate-500 font-medium tabular-nums">
+                <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium tabular-nums">
                   {studyTimeTarget}
                 </div>
               )}
@@ -470,19 +454,19 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
 
           {/* HERO CARD 2: FREQUÊNCIA */}
           <div 
-            className="h-full bg-white rounded-xl p-5 border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:shadow-md print:shadow-none"
+            className="h-full bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 transition-all hover:shadow-md print:shadow-none"
             title="Frequência (Pulso 1.0 / 2.0): Quantidade de presenças / Quantidade de presença + faltas"
           >
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-[#EBF3FB] border-2 border-[#BCD7F2] flex items-center justify-center text-[#0A3977] shrink-0">
-                <Calendar className="w-7 h-7" />
+            <div className="flex items-center gap-3 sm:gap-3.5">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-[#EBF3FB] border-2 border-[#BCD7F2] flex items-center justify-center text-[#0A3977] shrink-0">
+                <Calendar className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <div>
-                <span className="text-xs font-black tracking-wider text-slate-700 uppercase block">
+                <span className="text-[11px] sm:text-xs font-black tracking-wider text-slate-700 uppercase block">
                   FREQUÊNCIA
                 </span>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <span className="text-4xl font-extrabold text-[#0A3977] tracking-tight tabular-nums font-sans print:text-3xl">
+                <div className="flex items-baseline gap-1.5 mt-0.5">
+                  <span className="text-2xl sm:text-3xl font-black text-[#0A3977] tracking-tight tabular-nums font-sans print:text-2xl">
                     {attendanceDisplay}
                   </span>
                 </div>
@@ -490,18 +474,18 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
             </div>
 
             {/* Indicator & comparison */}
-            <div className="sm:text-right flex flex-col sm:items-end justify-center border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100">
-              <div className={`flex items-center gap-1.5 font-extrabold text-lg sm:text-xl tabular-nums ${
+            <div className="sm:text-right flex flex-col sm:items-end justify-center border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
+              <div className={`flex items-center gap-1 font-black text-base sm:text-lg tabular-nums ${
                 !hasData 
                   ? 'text-slate-400' 
                   : attendanceIsPositive === false 
                   ? 'text-rose-600' 
                   : 'text-emerald-600'
               }`}>
-                <span className="text-[22px]">{!hasData ? '—' : attendanceIsPositive === false ? '▼' : '▲'}</span>
-                <span className="text-[22px]">{attendanceDiff}</span>
+                <span className="text-lg sm:text-xl">{!hasData ? '—' : attendanceIsPositive === false ? '▼' : '▲'}</span>
+                <span className="text-lg sm:text-xl">{attendanceDiff}</span>
               </div>
-              <div className={`text-xs font-bold tabular-nums ${
+              <div className={`text-[11px] font-bold tabular-nums ${
                 !hasData 
                   ? 'text-slate-400' 
                   : attendanceIsPositive === false 
@@ -510,11 +494,11 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
               }`}>
                 {attendanceDiffText}
               </div>
-              <div className="text-[11px] text-slate-500 font-medium mt-1 tabular-nums">
+              <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium mt-0.5 tabular-nums">
                 {attendancePreviousYear}
               </div>
               {hasData && (
-                <div className="text-[11px] text-slate-500 font-medium tabular-nums">
+                <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium tabular-nums">
                   Meta: 80,00%
                 </div>
               )}
@@ -524,21 +508,21 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
         </div>
 
         {/* Governance Indicators Responsive Grid: 1 col mobile -> 2 cols sm -> 3 cols lg -> 6 cols xl */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5 print:grid-cols-6 print:gap-2 items-stretch">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-2.5 print:grid-cols-6 print:gap-1.5 items-stretch">
           {/* Card 1: Grau de Aprendizagem */}
           <div 
-            className="h-full flex flex-col justify-between bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs text-xs print:p-2.5"
+            className="h-full flex flex-col justify-between bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200/90 shadow-2xs text-xs print:p-2"
             title="Grau de Aprendizagem (Pulso 1.0 / 2.0): Total de provas com notas >= as notas esperada / Total de provas realizadas. Nota esperada: média da taxa de acerto das questões que compõem cada prova."
           >
-            <div className="flex items-center justify-between gap-1.5">
-              <span className="text-slate-600 font-bold text-[11px] leading-snug">Grau de Aprendizagem</span>
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-slate-600 font-bold text-[10px] sm:text-[11px] leading-snug">Grau de Aprendizagem</span>
             </div>
-            <div className="text-[20px] font-extrabold text-slate-900 my-1.5 tabular-nums tracking-tight">
+            <div className="text-base sm:text-lg font-black text-slate-900 my-1 tabular-nums tracking-tight">
               {learningScoreDisplay}
             </div>
-            <div className="text-[11px] text-slate-500 font-medium leading-tight border-t border-slate-100 pt-1.5 tabular-nums">
+            <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium leading-tight border-t border-slate-100 pt-1 tabular-nums">
               {hasData ? (
-                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                <div className="flex flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5">
                   <span>Meta: {learningTarget}</span>
                   <span>A.A: {learningPrevious}</span>
                 </div>
@@ -550,23 +534,23 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
 
           {/* Card 2: Reprovação Geral (com destaque semântico de risco) */}
           <div 
-            className={`h-full flex flex-col justify-between p-3.5 rounded-xl border shadow-2xs text-xs transition-colors print:p-2.5 ${overallFailureScheme.cardBg}`}
+            className={`h-full flex flex-col justify-between p-2.5 sm:p-3 rounded-xl border shadow-2xs text-xs transition-colors print:p-2 ${overallFailureScheme.cardBg}`}
             title="Reprovação (Pulso 2.0): Quantidade de alunos disciplinas com notas <6 na expressão: maior nota entre (AV, NC e AVS) + (SM1+ SM2) dividido pela quantidade alunos disciplinas que realizaram ao menos uma das três avaliações."
           >
-            <div className="flex items-center justify-between gap-1.5">
-              <span className="text-slate-700 font-bold text-[11px] leading-snug">Reprovação Geral</span>
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-slate-700 font-bold text-[10px] sm:text-[11px] leading-snug">Reprovação Geral</span>
               {hasData && (
-                <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded border ${overallFailureScheme.badgeStyle}`}>
+                <span className={`px-1 py-0.2 text-[9px] sm:text-[10px] font-bold rounded border ${overallFailureScheme.badgeStyle}`}>
                   {overallFailureScheme.levelLabel}
                 </span>
               )}
             </div>
-            <div className={`text-[20px] font-extrabold my-1.5 tabular-nums tracking-tight ${overallFailureScheme.valueText}`}>
+            <div className={`text-base sm:text-lg font-black my-1 tabular-nums tracking-tight ${overallFailureScheme.valueText}`}>
               {failureRateDisplay}
             </div>
-            <div className="text-[11px] text-slate-600 font-medium leading-tight border-t border-slate-200/60 pt-1.5 tabular-nums">
+            <div className="text-[10px] sm:text-[11px] text-slate-600 font-medium leading-tight border-t border-slate-200/60 pt-1 tabular-nums">
               {hasData ? (
-                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                <div className="flex flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5">
                   <span>Meta: {failureTarget}</span>
                   <span>A.A: {failurePrevious}</span>
                 </div>
@@ -578,18 +562,18 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
 
           {/* Card 3: Adesão AV */}
           <div 
-            className="h-full flex flex-col justify-between bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs text-xs print:p-2.5"
+            className="h-full flex flex-col justify-between bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200/90 shadow-2xs text-xs print:p-2"
             title="Adesão AV (Pulso 1.0 / 2.0): Quantidade alunos disciplinas que realizaram ao menos uma das avaliações: (AV, NC, AVS, NF) / Quantidade de alunos disciplinas"
           >
-            <div className="flex items-center justify-between gap-1.5">
-              <span className="text-slate-600 font-bold text-[11px] leading-snug">Adesão AV</span>
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-slate-600 font-bold text-[10px] sm:text-[11px] leading-snug">Adesão AV</span>
             </div>
-            <div className="text-[20px] font-extrabold text-slate-900 my-1.5 tabular-nums tracking-tight">
+            <div className="text-base sm:text-lg font-black text-slate-900 my-1 tabular-nums tracking-tight">
               {adhesionAVDisplay}
             </div>
-            <div className="text-[11px] text-slate-500 font-medium leading-tight border-t border-slate-100 pt-1.5 tabular-nums">
+            <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium leading-tight border-t border-slate-100 pt-1 tabular-nums">
               {hasData ? (
-                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                <div className="flex flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5">
                   <span>Meta: {adhesionAVTarget}</span>
                   <span>A.A: {adhesionAVPrevious}</span>
                 </div>
@@ -601,18 +585,18 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
 
           {/* Card 4: Adesão SM */}
           <div 
-            className="h-full flex flex-col justify-between bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs text-xs print:p-2.5"
+            className="h-full flex flex-col justify-between bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200/90 shadow-2xs text-xs print:p-2"
             title="Adesão SM (Pulso 1.0 / 2.0): A partir de 2024.1 todas as modalidades seguem com SM1 e SM2 (Quantidade alunos disciplinas que realizaram SM1 e SM2 / Quantidade de alunos disciplinas)."
           >
-            <div className="flex items-center justify-between gap-1.5">
-              <span className="text-slate-600 font-bold text-[11px] leading-snug">Adesão SM</span>
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-slate-600 font-bold text-[10px] sm:text-[11px] leading-snug">Adesão SM</span>
             </div>
-            <div className="text-[20px] font-extrabold text-slate-900 my-1.5 tabular-nums tracking-tight">
+            <div className="text-base sm:text-lg font-black text-slate-900 my-1 tabular-nums tracking-tight">
               {adhesionSMDisplay}
             </div>
-            <div className="text-[11px] text-slate-500 font-medium leading-tight border-t border-slate-100 pt-1.5 tabular-nums">
+            <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium leading-tight border-t border-slate-100 pt-1 tabular-nums">
               {hasData ? (
-                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                <div className="flex flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5">
                   <span>Meta: {adhesionSMTarget}</span>
                   <span>A.A: {adhesionSMPrevious}</span>
                 </div>
@@ -624,42 +608,42 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
 
           {/* Card 5: Learning Health (LHI) */}
           <div 
-            className={`h-full flex flex-col justify-between p-3.5 rounded-xl border shadow-2xs text-xs transition-colors print:p-2.5 ${overallHealthScheme.cardBg}`}
+            className={`h-full flex flex-col justify-between p-2.5 sm:p-3 rounded-xl border shadow-2xs text-xs transition-colors print:p-2 ${overallHealthScheme.cardBg}`}
             title="Learning Health Index (LHI): Índice composto de vitalidade pedagógica (0 a 100)."
           >
-            <div className="flex items-center justify-between gap-1.5">
-              <span className={`font-bold text-[11px] leading-snug ${overallHealthScheme.titleText}`}>
+            <div className="flex items-center justify-between gap-1">
+              <span className={`font-bold text-[10px] sm:text-[11px] leading-snug ${overallHealthScheme.titleText}`}>
                 Learning Health (LHI)
               </span>
             </div>
-            <div className={`text-[20px] font-extrabold my-1.5 tabular-nums tracking-tight ${overallHealthScheme.valueText}`}>
-              {avgLHI} <span className="text-xs font-semibold opacity-70">/ 100</span>
+            <div className={`text-base sm:text-lg font-black my-1 tabular-nums tracking-tight ${overallHealthScheme.valueText}`}>
+              {avgLHI} <span className="text-[10px] font-semibold opacity-70">/ 100</span>
             </div>
-            <div className="flex items-center justify-between gap-1 border-t border-black/5 pt-1.5">
-              <span className={`text-[11px] font-bold ${overallHealthScheme.subText}`}>
+            <div className="flex items-center justify-between gap-1 border-t border-black/5 pt-1">
+              <span className={`text-[10px] sm:text-[11px] font-bold ${overallHealthScheme.subText}`}>
                 {overallHealthScheme.levelLabel}
               </span>
-              <span className="text-[10px] text-slate-500 font-medium">Saúde</span>
+              <span className="text-[9px] text-slate-500 font-medium">Saúde</span>
             </div>
           </div>
 
           {/* Card 6: Academic Risk (ARS) com esquema de cores diferenciado */}
           <div 
-            className={`h-full flex flex-col justify-between p-3.5 rounded-xl border shadow-2xs text-xs transition-colors print:p-2.5 ${overallRiskScheme.cardBg}`}
+            className={`h-full flex flex-col justify-between p-2.5 sm:p-3 rounded-xl border shadow-2xs text-xs transition-colors print:p-2 ${overallRiskScheme.cardBg}`}
             title="Academic Risk Score (ARS): Esquema de cores diferenciado por nível de risco (Verde < 25 Controlado, Amarelo 25-44.9 Alerta, Vermelho >= 45 Alto Risco)."
           >
-            <div className="flex items-center justify-between gap-1.5">
-              <span className={`font-bold text-[11px] leading-snug ${overallRiskScheme.titleText}`}>
+            <div className="flex items-center justify-between gap-1">
+              <span className={`font-bold text-[10px] sm:text-[11px] leading-snug ${overallRiskScheme.titleText}`}>
                 Academic Risk (ARS)
               </span>
-              <span className={`px-1.5 py-0.5 text-[10px] font-extrabold rounded border ${overallRiskScheme.badgeStyle}`}>
+              <span className={`px-1 py-0.2 text-[9px] sm:text-[10px] font-extrabold rounded border ${overallRiskScheme.badgeStyle}`}>
                 {overallRiskScheme.levelLabel}
               </span>
             </div>
-            <div className={`text-[20px] font-extrabold my-1.5 tabular-nums tracking-tight ${overallRiskScheme.valueText}`}>
-              {avgARS} <span className="text-xs font-semibold opacity-70">/ 100</span>
+            <div className={`text-base sm:text-lg font-black my-1 tabular-nums tracking-tight ${overallRiskScheme.valueText}`}>
+              {avgARS} <span className="text-[10px] font-semibold opacity-70">/ 100</span>
             </div>
-            <div className="flex items-center justify-between gap-1 border-t border-black/5 pt-1.5 text-[10px] font-semibold tabular-nums">
+            <div className="flex items-center justify-between gap-1 border-t border-black/5 pt-1 text-[9px] sm:text-[10px] font-semibold tabular-nums">
               <span className="text-emerald-800" title="Disciplinas em nível Controlado">
                 {controlledRiskCount} Contr.
               </span>
@@ -675,53 +659,53 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
 
         {/* Matriz Visual de Distribuição de Risco Acadêmico (Verde Controlado / Amarelo Alerta / Vermelho Alto Risco) */}
         {hasData && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 print:grid-cols-3 print:gap-2 items-stretch">
-            <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5 print:grid-cols-3 print:gap-1.5 items-stretch">
+            <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl px-3 py-1.5 sm:px-3.5 sm:py-2 flex items-center justify-between gap-2.5">
               <div>
-                <div className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-900">
+                <div className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-emerald-900">
                   Nível Controlado (Baixo Risco)
                 </div>
-                <div className="text-[11px] text-emerald-700 font-medium">
+                <div className="text-[10px] sm:text-[11px] text-emerald-700 font-medium">
                   ARS &lt; 25 · Desempenho equilibrado
                 </div>
               </div>
               <div className="text-right tabular-nums shrink-0">
-                <span className="text-xl font-black text-emerald-800">{controlledRiskCount}</span>
-                <span className="text-[11px] font-bold text-emerald-700 block">
+                <span className="text-lg sm:text-xl font-black text-emerald-800">{controlledRiskCount}</span>
+                <span className="text-[10px] sm:text-[11px] font-bold text-emerald-700 block">
                   {Math.round((controlledRiskCount / totalDisciplines) * 100)}% das turmas
                 </span>
               </div>
             </div>
 
-            <div className="bg-amber-50/90 border border-amber-200 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3">
+            <div className="bg-amber-50/90 border border-amber-200 rounded-xl px-3 py-1.5 sm:px-3.5 sm:py-2 flex items-center justify-between gap-2.5">
               <div>
-                <div className="text-[11px] font-extrabold uppercase tracking-wider text-amber-900">
+                <div className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-amber-900">
                   Nível em Alerta (Risco Moderado)
                 </div>
-                <div className="text-[11px] text-amber-800 font-medium">
+                <div className="text-[10px] sm:text-[11px] text-amber-800 font-medium">
                   ARS 25 a 44,9 · Monitoramento preventivo
                 </div>
               </div>
               <div className="text-right tabular-nums shrink-0">
-                <span className="text-xl font-black text-amber-800">{alertRiskCount}</span>
-                <span className="text-[11px] font-bold text-amber-800 block">
+                <span className="text-lg sm:text-xl font-black text-amber-800">{alertRiskCount}</span>
+                <span className="text-[10px] sm:text-[11px] font-bold text-amber-800 block">
                   {Math.round((alertRiskCount / totalDisciplines) * 100)}% das turmas
                 </span>
               </div>
             </div>
 
-            <div className="bg-rose-50/90 border border-rose-200 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3">
+            <div className="bg-rose-50/90 border border-rose-200 rounded-xl px-3 py-1.5 sm:px-3.5 sm:py-2 flex items-center justify-between gap-2.5">
               <div>
-                <div className="text-[11px] font-extrabold uppercase tracking-wider text-rose-900">
+                <div className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-rose-900">
                   Nível Alto Risco / Crítico
                 </div>
-                <div className="text-[11px] text-rose-800 font-medium">
+                <div className="text-[10px] sm:text-[11px] text-rose-800 font-medium">
                   ARS &ge; 45 · Intervenção prioritária
                 </div>
               </div>
               <div className="text-right tabular-nums shrink-0">
-                <span className="text-xl font-black text-rose-800">{highRiskCount}</span>
-                <span className="text-[11px] font-bold text-rose-800 block">
+                <span className="text-lg sm:text-xl font-black text-rose-800">{highRiskCount}</span>
+                <span className="text-[10px] sm:text-[11px] font-bold text-rose-800 block">
                   {Math.round((highRiskCount / totalDisciplines) * 100)}% das turmas
                 </span>
               </div>
@@ -733,41 +717,41 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
         <div className="bg-white rounded-xl border border-slate-200/90 shadow-xs overflow-hidden print:shadow-none">
           
           {/* Navy Rounded Ranking Header Bar */}
-          <div className="bg-[#084172] text-white px-5 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 print:py-2">
-            <div className="flex items-center gap-2.5">
-              <div className="w-6 h-6 rounded-full bg-white/15 flex items-center justify-center shrink-0">
-                <Clock className="w-4 h-4 text-white" />
+          <div className="bg-[#084172] text-white px-3.5 sm:px-4 py-2 sm:py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 print:py-1.5">
+            <div className="flex items-center gap-2">
+              <div className="w-5 h-5 rounded-full bg-white/15 flex items-center justify-center shrink-0">
+                <Clock className="w-3.5 h-3.5 text-white" />
               </div>
-              <span className="text-sm font-bold tracking-wide">
+              <span className="text-xs sm:text-sm font-bold tracking-wide">
                 Ranking de Tempo de Estudo e Nível de Risco por Disciplina
               </span>
             </div>
-            <span className="text-[11px] font-semibold text-white/80">
+            <span className="text-[10px] sm:text-[11px] font-semibold text-white/80">
               {hasData ? `${sortedDisciplines.length} Disciplinas Importadas · ${totalStudents} Alunos · ${campusLabel}` : '0 Disciplinas'}
             </span>
           </div>
 
           {/* If Base is Zerada (empty), display clear zeroed message */}
           {!hasData ? (
-            <div className="p-8 text-center bg-white space-y-4">
-              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
-                <Clock className="w-6 h-6" />
+            <div className="p-6 text-center bg-white space-y-3">
+              <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                <Clock className="w-5 h-5" />
               </div>
               <div>
                 <h3 className="text-sm font-bold text-slate-800">
                   Base de Dados Zerada
                 </h3>
-                <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                <p className="text-xs text-slate-500 max-w-md mx-auto mt-0.5">
                   Nenhum indicador curricular importado no momento. Acesse a tela "Conexão & Fontes" para importar relatórios PDF ou sincronizar o conector Power BI.
                 </p>
               </div>
               {onNavigateToSources && (
-                <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2 no-print">
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-1 no-print">
                   <button
                     onClick={onNavigateToSources}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md transition-colors cursor-pointer"
                   >
-                    <Database className="w-4 h-4 text-blue-600" />
+                    <Database className="w-3.5 h-3.5 text-blue-600" />
                     <span>Acessar Conexão & Fontes</span>
                   </button>
                 </div>
@@ -778,16 +762,16 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
             <div className="overflow-x-auto print:overflow-visible">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="bg-[#0A3977] text-white font-bold text-[11px] border-b border-[#082E60]">
-                    <th className="py-2.5 px-3 text-center w-11">#</th>
-                    <th className="py-2.5 px-3">Disciplina</th>
-                    <th className="py-2.5 px-3 font-mono text-center">Código</th>
-                    <th className="py-2.5 px-3 text-center">Alunos (A.A.)</th>
-                    <th className="py-2.5 px-3 text-center">Alunos (Atual)</th>
-                    <th className="py-2.5 px-3 text-center">Tempo (A.A.)</th>
-                    <th className="py-2.5 px-3 text-center bg-[#07305C]">Tempo de Estudo</th>
-                    <th className="py-2.5 px-3 text-center">Nível de Risco (ARS)</th>
-                    <th className="py-2.5 px-3 w-52 text-left">Barra de Desempenho</th>
+                  <tr className="bg-[#0A3977] text-white font-bold text-[10px] sm:text-[11px] border-b border-[#082E60]">
+                    <th className="py-2 px-2.5 text-center w-10">#</th>
+                    <th className="py-2 px-2.5">Disciplina</th>
+                    <th className="py-2 px-2.5 font-mono text-center">Código</th>
+                    <th className="py-2 px-2.5 text-center">Alunos (A.A.)</th>
+                    <th className="py-2 px-2.5 text-center">Alunos (Atual)</th>
+                    <th className="py-2 px-2.5 text-center">Tempo (A.A.)</th>
+                    <th className="py-2 px-2.5 text-center bg-[#07305C]">Tempo de Estudo</th>
+                    <th className="py-2 px-2.5 text-center">Nível de Risco (ARS)</th>
+                    <th className="py-2 px-2.5 w-32 sm:w-40 md:w-44 text-left">Barra de Desempenho</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-800">
@@ -823,59 +807,62 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
                         }`}
                       >
                         {/* 1. Rank number */}
-                        <td className="py-2.5 px-3 text-center tabular-nums">
+                        <td className="py-1.5 sm:py-2 px-2 sm:px-2.5 text-center tabular-nums whitespace-nowrap">
                           {isTopThree ? (
-                            <span className="inline-flex items-center justify-center w-6 h-5 rounded-md bg-[#16A34A] text-white font-black text-[11px] shadow-2xs">
+                            <span className="inline-flex items-center justify-center w-5 h-4.5 rounded bg-[#16A34A] text-white font-black text-[10px] shadow-2xs">
                               {rank}
                             </span>
                           ) : (
-                            <span className="text-slate-600 font-bold text-xs">
+                            <span className="text-slate-600 font-bold text-[11px]">
                               {rank}
                             </span>
                           )}
                         </td>
 
                         {/* 2. Disciplina name (uppercase, crisp font) */}
-                        <td className="py-2.5 px-3 font-bold text-slate-900 tracking-tight text-[11px] sm:text-xs">
+                        <td 
+                          className="py-1.5 sm:py-2 px-2 sm:px-2.5 font-bold text-slate-900 tracking-tight text-[11px] sm:text-xs max-w-[190px] sm:max-w-[240px] truncate"
+                          title={item.name}
+                        >
                           {item.name}
                         </td>
 
                         {/* 3. Código */}
-                        <td className="py-2.5 px-3 font-mono text-[11px] text-center text-slate-700 font-semibold">
+                        <td className="py-1.5 sm:py-2 px-2 sm:px-2.5 font-mono text-[10px] sm:text-[11px] text-center text-slate-700 font-semibold whitespace-nowrap">
                           {item.code}
                         </td>
 
                         {/* 4. Alunos (A.A.) */}
-                        <td className={`py-2.5 px-3 text-center tabular-nums text-xs font-semibold ${
+                        <td className={`py-1.5 sm:py-2 px-2 sm:px-2.5 text-center tabular-nums text-[11px] font-semibold whitespace-nowrap ${
                           hasPrevStudents ? 'text-slate-700' : 'text-slate-400'
                         }`}>
                           {hasPrevStudents ? item.previousYearStudents : '—'}
                         </td>
 
                         {/* 5. Alunos (Atual) */}
-                        <td className="py-2.5 px-3 text-center tabular-nums text-xs font-bold text-slate-900">
+                        <td className="py-1.5 sm:py-2 px-2 sm:px-2.5 text-center tabular-nums text-[11px] font-bold text-slate-900 whitespace-nowrap">
                           {item.totalStudents}
                         </td>
 
                         {/* 6. Tempo de (A.A.) */}
-                        <td className={`py-2.5 px-3 text-center tabular-nums text-xs ${
+                        <td className={`py-1.5 sm:py-2 px-2 sm:px-2.5 text-center tabular-nums text-[11px] whitespace-nowrap ${
                           hasPrevTime ? 'text-slate-800 font-semibold' : 'text-slate-400'
                         }`}>
                           {hasPrevTime ? item.previousYearStudyTime : '—'}
                         </td>
 
                         {/* 7. Tempo de Estudo (Current) */}
-                        <td className="py-2.5 px-3 text-center tabular-nums font-extrabold text-[#0A3977] bg-slate-50/90 text-xs">
+                        <td className="py-1.5 sm:py-2 px-2 sm:px-2.5 text-center tabular-nums font-extrabold text-[#0A3977] bg-slate-50/90 text-[11px] sm:text-xs whitespace-nowrap">
                           {item.studyTimeFormatted || `${item.studyHoursPerWeek}h`}
                         </td>
 
                         {/* 8. Nível de Risco (ARS) com esquema de cores suave (Verde / Amarelo / Vermelho) */}
-                        <td className="py-2.5 px-3 text-center tabular-nums">
+                        <td className="py-1.5 sm:py-2 px-2 sm:px-2.5 text-center tabular-nums whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() => setSelectedRiskItem(item)}
                             title="Clique para ver a justificativa do Nível de Risco (ARS) e a solução recomendada"
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-bold transition-all hover:brightness-95 cursor-pointer ${itemRisk.badgeStyle}`}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] sm:text-[11px] font-bold transition-all hover:brightness-95 cursor-pointer ${itemRisk.badgeStyle}`}
                           >
                             <span>{item.ars.toFixed(1)}</span>
                             <span className="opacity-50">·</span>
@@ -884,9 +871,9 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
                         </td>
 
                         {/* 9. Barra de Desempenho + Ícone de Informação (Justificativa ARS & Solução) */}
-                        <td className="py-2.5 px-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden p-0.5 border border-slate-200/60">
+                        <td className="py-1.5 sm:py-2 px-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden p-0.5 border border-slate-200/60">
                               <div 
                                 className={`h-full rounded-full transition-all duration-500 ${barColorClass}`}
                                 style={{ width: `${percentageWidth}%` }}
@@ -895,11 +882,11 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
                             <button
                               type="button"
                               onClick={() => setSelectedRiskItem(item)}
-                              className="p-1 text-slate-600 hover:text-[#0A3977] hover:bg-blue-50 rounded-md transition-colors cursor-pointer shrink-0 no-print"
+                              className="p-1 text-slate-500 hover:text-[#0A3977] hover:bg-blue-50 rounded transition-colors cursor-pointer shrink-0 no-print"
                               title="Ver justificativa do Nível de Risco (ARS) e solução recomendada"
                               aria-label={`Ver justificativa do Nível de Risco (ARS) e solução para ${item.name}`}
                             >
-                              <Info className="w-4 h-4 stroke-[2.2]" />
+                              <Info className="w-3.5 h-3.5 stroke-[2]" />
                             </button>
                           </div>
                         </td>
@@ -912,21 +899,21 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
           )}
 
           {/* 4. Executive Slide Footer with Official Estácio Logo */}
-          <div className="bg-[#EBF3FB] px-6 py-3.5 border-t border-[#BCD7F2] flex flex-col sm:flex-row print:flex-row items-center justify-between gap-3 print:py-2">
-            <div className="text-[11px] text-slate-600 font-medium">
+          <div className="bg-[#EBF3FB] px-3.5 sm:px-5 py-2 sm:py-2.5 border-t border-[#BCD7F2] flex flex-col sm:flex-row print:flex-row items-center justify-between gap-2.5 print:py-1.5">
+            <div className="text-[10px] sm:text-[11px] text-slate-600 font-medium">
               Fonte: YDUQS – Pulso Acadêmico (Curso) · {campusLabel} · A.A. = Ano Anterior · {lastUpdatedText}
             </div>
 
             {/* Official Estácio Logo */}
             <div className="flex items-center gap-2 shrink-0">
-              <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider hidden md:inline print:inline">
+              <span className="text-[9px] sm:text-[10px] text-slate-500 font-semibold uppercase tracking-wider hidden md:inline print:inline">
                 Instituição
               </span>
-              <div className="bg-white px-3 py-1 rounded shadow-2xs border border-slate-200 flex items-center justify-center">
+              <div className="bg-white px-2.5 py-0.5 rounded shadow-2xs border border-slate-200 flex items-center justify-center">
                 <img
                   src="/assets/aistudio/Logo_estacio_sem_fundo_83f2716c.png"
                   alt="Logo Estácio Oficial"
-                  className="h-6 w-auto object-contain"
+                  className="h-5 w-auto object-contain"
                 />
               </div>
             </div>
@@ -1013,7 +1000,7 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
 
         return (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs no-print"
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs no-print"
             onClick={() => setSelectedRiskItem(null)}
           >
             <div
@@ -1021,32 +1008,32 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
               onClick={(e) => e.stopPropagation()}
             >
               {/* Cabeçalho do Modal com a cor semântica do Nível de Risco */}
-              <div className="bg-[#0A3977] text-white px-6 py-4 border-b-4 border-[#FFB800] flex items-start justify-between gap-4">
+              <div className="bg-[#0A3977] text-white px-4 sm:px-5 py-3 border-b-4 border-[#FFB800] flex items-start justify-between gap-3">
                 <div>
-                  <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-[#38BDF8]">
+                  <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#38BDF8]">
                     <Info className="w-3.5 h-3.5" />
                     <span>Justificativa de Risco Acadêmico (ARS) & Plano de Solução</span>
                   </div>
-                  <h3 className="text-base sm:text-lg font-extrabold text-white mt-1 leading-snug">
+                  <h3 className="text-sm sm:text-base font-extrabold text-white mt-0.5 leading-snug">
                     {selectedRiskItem.name}
                   </h3>
-                  <p className="text-xs text-slate-200 mt-0.5 font-mono">
-                    Código: {selectedRiskItem.code} · Alunos Atuais: {selectedRiskItem.totalStudents} · Tempo de Estudo: {selectedRiskItem.studyTimeFormatted || `${selectedRiskItem.studyHoursPerWeek}h`}
+                  <p className="text-[11px] text-slate-200 font-mono">
+                    Código: {selectedRiskItem.code} · Alunos: {selectedRiskItem.totalStudents} · Tempo de Estudo: {selectedRiskItem.studyTimeFormatted || `${selectedRiskItem.studyHoursPerWeek}h`}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setSelectedRiskItem(null)}
-                  className="text-white/80 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                  className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
                   aria-label="Fechar modal"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+              <div className="p-3.5 sm:p-4.5 space-y-3.5 max-h-[82vh] overflow-y-auto">
                 {/* Banner de Classificação do Nível de Risco (Verde / Amarelo / Vermelho) */}
-                <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${modalRisk.cardBg}`}>
+                <div className={`p-3 sm:p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${modalRisk.cardBg}`}>
                   <div className="flex items-start gap-3">
                     <div className={`p-2 rounded-lg border shrink-0 ${modalRisk.badgeStyle}`}>
                       {selectedRiskItem.ars >= 45 ? (
