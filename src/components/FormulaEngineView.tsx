@@ -209,7 +209,7 @@ export const FormulaEngineView: React.FC<FormulaEngineViewProps> = ({
             title="Perfil Default Oficial: utiliza as regras da Matriz Conceitual de Indicadores — Pulso 2.0"
           >
             <Sparkles className={`w-3.5 h-3.5 ${activePresetId === 'estacio' ? 'text-[#FFB800]' : 'text-[#0A3977]'}`} />
-            <span>Padrão Estácio</span>
+            <span className="inline-block w-[100.1771px]">Padrão Estácio</span>
             <span
               className={`text-[10px] px-1.5 py-0.2 rounded font-extrabold uppercase ${
                 activePresetId === 'estacio'

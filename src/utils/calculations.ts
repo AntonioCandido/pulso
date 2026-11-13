@@ -325,20 +325,364 @@ export function getARSLevel(ars: number): ARSLevel {
   return 'Crítico';
 }
 
+function normalizeCurriculumText(text: string): string {
+  return (text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+interface DisciplineDomainProfile {
+  area: string;
+  criticalTopics: string;
+  practicalTooling: string;
+  facultyDiagnosticMethod: string;
+  studentPracticeFocus: string;
+  monitoringWorkshop: string;
+}
+
+function resolveDisciplineDomain(item: DisciplineMetric): DisciplineDomainProfile {
+  const n = normalizeCurriculumText(`${item.code} ${item.name}`);
+
+  if (n.includes('compilador')) {
+    return {
+      area: 'Teoria da Computação & Tradutores',
+      criticalTopics: 'Análise léxica (autômatos/expressões regulares), análise sintática (LL/LR) e tabela de símbolos',
+      practicalTooling: 'JFLAP, Flex/Bison ou ANTLR para visualização de árvores de derivação e tokens',
+      facultyDiagnosticMethod: 'oficinas passo a passo de construção de analisadores léxico-sintáticos com testes de gramáticas reais',
+      studentPracticeFocus: 'resolução guiada de derivações à esquerda/direita e eliminação de recursão à esquerda',
+      monitoringWorkshop: 'maratona prática de autômatos finitos e gramáticas livres de contexto com resolução de provas anteriores',
+    };
+  }
+  if (n.includes('protocolo') && n.includes('rede')) {
+    return {
+      area: 'Redes de Computadores & Comunicação de Dados',
+      criticalTopics: 'Encapsulamento TCP/UDP, ARP, DHCP, DNS, BGP/OSPF e controle de congestionamento',
+      practicalTooling: 'Wireshark (captura de tráfego real) e Cisco Packet Tracer para inspeção de cabeçalhos',
+      facultyDiagnosticMethod: 'laboratórios de captura e dissecação de pacotes TCP/UDP e DHCP em tempo real com roteiro guiado',
+      studentPracticeFocus: 'leitura de capturas PCAP e mapeamento de portas, flags TCP (SYN/ACK/FIN) e fluxos DNS/HTTP',
+      monitoringWorkshop: 'sessões práticas de Packet Tracer simulando fluxo completo de pacotes entre cliente, switch e roteador',
+    };
+  }
+  if (n.includes('redes')) {
+    return {
+      area: 'Infraestrutura & Fundamentos de Redes',
+      criticalTopics: 'Modelo OSI vs. TCP/IP, endereçamento IPv4/IPv6, cálculo de sub-redes (CIDR/VLSM) e roteamento estático',
+      practicalTooling: 'Cisco Packet Tracer, calculadoras de máscara CIDR e simuladores de topologia LAN/WAN',
+      facultyDiagnosticMethod: 'bateria prática de cálculo de sub-redes (VLSM/CIDR) e montagem de topologias básicas no Packet Tracer',
+      studentPracticeFocus: 'exercícios diários de conversão binária, máscara de rede, broadcast e faixa de hosts válidos',
+      monitoringWorkshop: 'oficina de sub-redes CIDR e configuração inicial de switches/roteadores com gabarito comentado',
+    };
+  }
+  if (n.includes('ameaca') || n.includes('cibernetica')) {
+    return {
+      area: 'Cibersegurança & Threat Intelligence',
+      criticalTopics: 'Ciclo de Inteligência de Ameaças (CTI), matriz MITRE ATT&CK, IOCs e análise de incidentes',
+      practicalTooling: 'MITRE ATT&CK Navigator, VirusTotal, AlienVault OTX e playbooks SIEM/SOC',
+      facultyDiagnosticMethod: 'análise de estudos de caso de incidentes reais com mapeamento de TTPs na matriz MITRE ATT&CK',
+      studentPracticeFocus: 'correlação de indicadores de comprometimento (hashes, IPs, domínios) e escrita de relatórios TLP',
+      monitoringWorkshop: 'simulado de triagem de alertas SOC e identificação de vetores de ataque em cenários controlados',
+    };
+  }
+  if (n.includes('seguranca')) {
+    return {
+      area: 'Segurança da Informação & Governança',
+      criticalTopics: 'Tríade CIA, criptografia simétrica/assimétrica, controle de acesso, OWASP e normas ISO 27001/LGPD',
+      practicalTooling: 'laboratórios de análise de vulnerabilidades, hash/SSL e checklists de hardening',
+      facultyDiagnosticMethod: 'estudos de caso de gestão de riscos, avaliação de controles e simulações de políticas de segurança',
+      studentPracticeFocus: 'diferenciação prática entre autenticação/autorização, criptografia simétrica vs. assimétrica e LGPD',
+      monitoringWorkshop: 'mesa de resolução de cenários de auditoria de segurança e revisão comentada de questões AV/SM',
+    };
+  }
+  if (n.includes('web services') || (n.includes('nuvem') && n.includes('linux'))) {
+    return {
+      area: 'Cloud Computing, Linux & Web Services',
+      criticalTopics: 'Administração Linux (CLI/systemd/permissões), APIs REST/JSON, containers Docker e deploy em nuvem',
+      practicalTooling: 'Ubuntu/WSL, Postman/curl, Docker Compose e instâncias cloud sandbox',
+      facultyDiagnosticMethod: 'roteiros mão na massa de publicação de APIs REST em ambiente Linux containerizado',
+      studentPracticeFocus: 'comandos essenciais de shell Linux, códigos de status HTTP e testes de endpoints REST',
+      monitoringWorkshop: 'laboratório assistido de Docker + consumo de Web Services com depuração de logs no terminal',
+    };
+  }
+  if (n.includes('cloud') || n.includes('iot') || n.includes('industria 4.0')) {
+    return {
+      area: 'Cloud, IoT & Indústria 4.0',
+      criticalTopics: 'Protocolos MQTT/HTTP, leitura de telemetria de sensores em Python e ingestão de dados em nuvem',
+      practicalTooling: 'Python + Paho-MQTT, Wokwi/Node-RED e dashboards cloud de telemetria',
+      facultyDiagnosticMethod: 'projetos integradores simulando publicação/assinatura MQTT e armazenamento de séries temporais',
+      studentPracticeFocus: 'construção de scripts Python para envio de payloads JSON via MQTT e tratamento de exceções',
+      monitoringWorkshop: 'clínica prática de integração IoT-Cloud com simulação de sensores virtuais no Wokwi/Python',
+    };
+  }
+  if (n.includes('nuvem')) {
+    return {
+      area: 'Arquitetura & Computação em Nuvem',
+      criticalTopics: 'Modelos IaaS/PaaS/SaaS, virtualização, balanceamento de carga, auto-scaling e arquitetura serverless',
+      practicalTooling: 'simuladores de arquitetura cloud (AWS/Azure Academy labs) e diagramação de alta disponibilidade',
+      facultyDiagnosticMethod: 'desafios arquiteturais comparando custo, escalabilidade e tolerância a falhas entre IaaS, PaaS e FaaS',
+      studentPracticeFocus: 'mapeamento de serviços cloud por camada e análise de SLA, elasticidade e segurança compartilhada',
+      monitoringWorkshop: 'grupo de revisão de arquiteturas em nuvem e resolução de questões situacionais dos simulados SM',
+    };
+  }
+  if (n.includes('java') || n.includes('orientada a objetos')) {
+    return {
+      area: 'Programação Orientada a Objetos (Java)',
+      criticalTopics: 'Classes e objetos, encapsulamento, herança, polimorfismo, interfaces e tratamento de exceções',
+      practicalTooling: 'IntelliJ IDEA / Eclipse / VS Code com depurador step-by-step e diagramas UML de classe',
+      facultyDiagnosticMethod: 'live coding refatorando código procedural para POO com diagramação de classes em tempo real',
+      studentPracticeFocus: 'implementação de hierarquias com sobrescrita (@Override), construtores e coleções List/Map',
+      monitoringWorkshop: 'plantão de depuração em Java focado em polimorfismo, interfaces e tratamento de NullPointerException',
+    };
+  }
+  if (n.includes('android') || n.includes('dispositivos moveis')) {
+    return {
+      area: 'Desenvolvimento Mobile Android',
+      criticalTopics: 'Ciclo de vida de Activities/Fragments, layouts responsivos, RecyclerView, APIs REST e persistência local',
+      practicalTooling: 'Android Studio, Emulador AVD/dispositivo físico e Logcat para rastreamento de ciclos de vida',
+      facultyDiagnosticMethod: 'oficinas práticas de construção de telas com navegação entre Activities e consumo de API JSON',
+      studentPracticeFocus: 'rastreamento do ciclo de vida (onCreate/onResume/onPause) e leitura de stacktraces no Logcat',
+      monitoringWorkshop: 'mutirão de configuração do Android Studio + implementação guiada de CRUD mobile passo a passo',
+    };
+  }
+  if (n.includes('web') || n.includes('html5') || n.includes('php')) {
+    return {
+      area: 'Desenvolvimento Web Full-Stack',
+      criticalTopics: 'Semântica HTML5/CSS3 responsivo, manipulação do DOM em JavaScript, requisições fetch e back-end PHP/MySQL',
+      practicalTooling: 'VS Code + DevTools do navegador (Console/Network) e ambiente XAMPP/Docker PHP',
+      facultyDiagnosticMethod: 'desenvolvimento incremental de miniaplicação CRUD integrando formulário HTML, validação JS e PHP',
+      studentPracticeFocus: 'inspeção de requisições GET/POST no DevTools, seletores CSS e integração PHP com banco de dados',
+      monitoringWorkshop: 'coding dojo de JavaScript + PHP com correção de bugs comuns de formulário e conexão PDO',
+    };
+  }
+  if (n.includes('desenvolvimento rapido') && n.includes('python')) {
+    return {
+      area: 'Desenvolvimento Rápido em Python',
+      criticalTopics: 'Manipulação de arquivos, bancos SQLite/PostgreSQL, frameworks web/GUI (Tkinter/Flask/FastAPI) e CRUD',
+      practicalTooling: 'VS Code + ambientes virtuais venv, SQLite Browser e Postman',
+      facultyDiagnosticMethod: 'oficina de prototipagem rápida construindo CRUD completo em Python conectado a banco relacional',
+      studentPracticeFocus: 'tratamento de arquivos CSV/JSON, criação de rotas/telas CRUD e tratamento de exceções try/except',
+      monitoringWorkshop: 'sessão prática de criação de ambientes virtuais, CRUD Python e revisão de erros de sintaxe/indentação',
+    };
+  }
+  if (n.includes('paradigma') && n.includes('python')) {
+    return {
+      area: 'Paradigmas de Linguagens (Python)',
+      criticalTopics: 'Paradigma imperativo, funcional (map/filter/lambda), orientado a objetos e tipagem dinâmica vs. estática',
+      practicalTooling: 'Python REPL, Jupyter Notebook e visualizador de escopo/pilha (Python Tutor)',
+      facultyDiagnosticMethod: 'comparação lado a lado resolvendo o mesmo problema nos paradigmas imperativo, funcional e OO',
+      studentPracticeFocus: 'exercícios de list comprehensions, funções de alta ordem, recursividade e classes em Python',
+      monitoringWorkshop: 'laboratório com Python Tutor para visualizar referências de memória, recursão e funções lambda',
+    };
+  }
+  if (n.includes('introducao a programacao') || n.includes('programacao de computadores')) {
+    return {
+      area: 'Algoritmos & Programação Introdutória',
+      criticalTopics: 'Variáveis/tipos, estruturas condicionais (if/else), laços de repetição (for/while), funções e vetores',
+      practicalTooling: 'Python Tutor (teste de mesa visual), Beecrowd/URI e VS Code em ambiente guiado',
+      facultyDiagnosticMethod: 'aulas com teste de mesa passo a passo no quadro + codificação assistida em dupla (pair programming)',
+      studentPracticeFocus: 'lista graduada de lógica (condicionais -> loops -> funções) executando teste de mesa antes de codificar',
+      monitoringWorkshop: 'monitoria de nivelamento de lógica básica e leitura de enunciados de programação para calouros',
+    };
+  }
+  if (n.includes('pensamento computacional')) {
+    return {
+      area: 'Pensamento Computacional & Fundamentos TI',
+      criticalTopics: 'Decomposição de problemas, reconhecimento de padrões, abstração, fluxogramas e pseudocódigo',
+      practicalTooling: 'Portugol Studio / Flowgorithm, Scratch/Blockly e mapas mentais de decomposição',
+      facultyDiagnosticMethod: 'desafios desplugados seguidos de tradução de problemas cotidianos em fluxogramas e pseudocódigo',
+      studentPracticeFocus: 'prática de quebra de problemas complexos em subetapas lógicas e validação com casos de teste',
+      monitoringWorkshop: 'oficina introdutória de algoritmos em Portugol/Flowgorithm para transição suave ao ambiente universitário',
+    };
+  }
+  if (n.includes('analise de dados')) {
+    return {
+      area: 'Ciência & Análise de Dados',
+      criticalTopics: 'Limpeza e tratamento de dados (ETL), estatística descritiva, correlação, Pandas/SQL e storytelling visual',
+      practicalTooling: 'Python (Pandas/Matplotlib/Seaborn), Google Colab / Jupyter e Power BI',
+      facultyDiagnosticMethod: 'estudos de caso com datasets reais aplicando limpeza de nulos, agrupamentos e leitura crítica de KPIs',
+      studentPracticeFocus: 'interpretação de média/mediana/desvio-padrão, filtragem de DataFrames e escolha de gráficos adequados',
+      monitoringWorkshop: 'notebook guiado no Google Colab para manipulação de tabelas e geração de gráficos analíticos',
+    };
+  }
+  if (n.includes('banco de dados')) {
+    return {
+      area: 'Modelagem & Banco de Dados',
+      criticalTopics: 'Modelo Entidade-Relacionamento (MER), cardinalidade, normalização (1FN–3FN), SQL DDL/DML e JOINs',
+      practicalTooling: 'brModelo (diagramação ER), MySQL Workbench / PostgreSQL pgAdmin e SQLite Online',
+      facultyDiagnosticMethod: 'oficina de conversão de regras de negócio em DER normalizado seguida de consultas SQL com JOIN/GROUP BY',
+      studentPracticeFocus: 'identificação de chaves primárias/estrangeiras, normalização até 3FN e escrita de SELECT com JOIN',
+      monitoringWorkshop: 'laboratório SQL prático com bateria de 15 consultas progressivas e revisão de modelagem ER',
+    };
+  }
+  if (n.includes('multiplas variaveis')) {
+    return {
+      area: 'Cálculo Multivariável & Vetorial',
+      criticalTopics: 'Funções de várias variáveis, derivadas parciais, vetor gradiente, regra da cadeia e integrais duplas/triplas',
+      practicalTooling: 'GeoGebra 3D (superfícies/curvas de nível), Symbolab/Wolfram e listas resolvidas passo a passo',
+      facultyDiagnosticMethod: 'visualização geométrica em GeoGebra 3D conectando derivadas parciais e extremos locais ao gráfico',
+      studentPracticeFocus: 'treino estruturado de derivadas parciais, matriz Jacobiana e montagem de limites em integrais duplas',
+      monitoringWorkshop: 'plantão de cálculo com revisão de derivação/integração básica e resolução comentada de integrais duplas',
+    };
+  }
+  if (n.includes('calculo')) {
+    return {
+      area: 'Cálculo Diferencial e Integral',
+      criticalTopics: 'Pré-cálculo (funções/fatoração), limites e continuidade, regras de derivação (cadeia/produto) e integrais',
+      practicalTooling: 'GeoGebra, Desmos e cadernos de nivelamento em pré-cálculo algébrico',
+      facultyDiagnosticMethod: 'diagnóstico inicial de álgebra básica + resolução detalhada dos passos intermediários sem saltar etapas',
+      studentPracticeFocus: 'revisão diária de propriedades de potências/logaritmos, tabela de derivadas e técnica de substituição',
+      monitoringWorkshop: 'clínica de pré-cálculo e resolução assistida de listas de limites, derivadas e otimização',
+    };
+  }
+  if (n.includes('geometria analitica') || n.includes('algebra linear')) {
+    return {
+      area: 'Geometria Analítica & Álgebra Linear',
+      criticalTopics: 'Operações com vetores, produto escalar/vetorial, sistemas lineares (Gauss), transformações lineares e autovalores',
+      practicalTooling: 'GeoGebra, Python/NumPy para visualização matricial e matrizes escalonadas comentadas',
+      facultyDiagnosticMethod: 'conexão visual entre operações matriciais e transformações geométricas no plano e no espaço',
+      studentPracticeFocus: 'escalonamento de sistemas lineares, cálculo de determinantes, base/dimensão e polinômio característico',
+      monitoringWorkshop: 'oficina de escalonamento de matrizes e resolução passo a passo de questões de vetores e retas/planos',
+    };
+  }
+  if (n.includes('modelagem matematica')) {
+    return {
+      area: 'Modelagem Matemática Aplicada',
+      criticalTopics: 'Tradução de problemas reais em equações/funções, regressão, otimização linear e análise de sensibilidade',
+      practicalTooling: 'Excel Solver, Python (SciPy/NumPy) e GeoGebra para simulação de cenários',
+      facultyDiagnosticMethod: 'resolução de problemas aplicados da computação formulando variáveis de decisão, restrições e função objetivo',
+      studentPracticeFocus: 'interpretação de enunciados para montagem de equações e validação dimensional dos resultados obtidos',
+      monitoringWorkshop: 'estudo dirigido com modelagem de 4 problemas-tipo e conferência gráfica das soluções',
+    };
+  }
+  if (n.includes('matematica e logica')) {
+    return {
+      area: 'Matemática Discreta & Lógica Formal',
+      criticalTopics: 'Lógica proposicional, conectivos e tabelas-verdade, equivalências lógicas, quantificadores, conjuntos e relações',
+      practicalTooling: 'geradores interativos de tabelas-verdade, diagramas de Venn e provas por contraposição/indução',
+      facultyDiagnosticMethod: 'exercícios de formalização de sentenças em linguagem natural para cálculo proposicional e de predicados',
+      studentPracticeFocus: 'construção sem erros de tabelas-verdade, negação de proposições compostas (Leis de De Morgan) e conjuntos',
+      monitoringWorkshop: 'oficina intensiva de tabelas-verdade, equivalências lógicas e silogismos aplicados à computação',
+    };
+  }
+  if (n.includes('arquitetura de computadores')) {
+    return {
+      area: 'Arquitetura & Organização de Computadores',
+      criticalTopics: 'Aritmética binária/complemento de 2, arquitetura Von Neumann, ULA, hierarquia de memória/cache e pipeline',
+      practicalTooling: 'simuladores didáticos (MARS/MIPS, Logisim ou Neander) para visualizar registradores e ciclo de instrução',
+      facultyDiagnosticMethod: 'simulação do ciclo busca-decodificação-execução em simulador visual de CPU e mapeamento de cache',
+      studentPracticeFocus: 'conversões binário/hexadecimal, complemento de dois e cálculo de acertos/endereçamento em memória cache',
+      monitoringWorkshop: 'prática guiada de rastreamento de registradores em simulador Assembly/Neander e exercícios de memória',
+    };
+  }
+  if (n.includes('sistemas operacionais')) {
+    return {
+      area: 'Sistemas Operacionais & Concorrência',
+      criticalTopics: 'Processos e threads, algoritmos de escalonamento de CPU, semáforos/deadlocks e paginação de memória',
+      practicalTooling: 'Linux (htop/ps/strace), simuladores de escalonamento FIFO/SJF/Round-Robin e substituição de páginas',
+      facultyDiagnosticMethod: 'traçado comparativo de gráficos de Gantt para escalonamento de processos e resolução de deadlocks',
+      studentPracticeFocus: 'cálculo de turnaround/tempo de espera em escalonamento, tradução de endereços virtuais e página faltante',
+      monitoringWorkshop: 'oficina de exercícios cronometrados de escalonamento de CPU e gerenciamento de memória virtual',
+    };
+  }
+  if (n.includes('sistemas digitais')) {
+    return {
+      area: 'Eletrônica & Sistemas Digitais',
+      criticalTopics: 'Sistemas numéricos, portas lógicas, álgebra de Boole, mapas de Karnaugh (K-Map) e flip-flops/contadores',
+      practicalTooling: 'Logisim Evolution / CircuitVerse / Tinkercad para montagem e teste lógico em tempo real',
+      facultyDiagnosticMethod: 'demonstração em simulador lógico partindo da tabela-verdade -> mapa de Karnaugh -> circuito simplificado',
+      studentPracticeFocus: 'agrupamento correto em mapas de Karnaugh (2, 3 e 4 variáveis) e simplificação booleana',
+      monitoringWorkshop: 'laboratório prático no Logisim montando somadores, multiplexadores e flip-flops com gabarito',
+    };
+  }
+  if (n.includes('engenharia de software')) {
+    return {
+      area: 'Engenharia de Software & Qualidade',
+      criticalTopics: 'Engenharia de requisitos, modelagem UML (casos de uso/classes/sequência), métodos ágeis (Scrum) e testes',
+      practicalTooling: 'Astah/Draw.io/PlantUML, Trello/Jira e roteiros de casos de teste unitários e de aceitação',
+      facultyDiagnosticMethod: 'dinâmicas de elicitação de requisitos e revisão crítica de diagramas UML aplicados a cenários reais',
+      studentPracticeFocus: 'distinção entre requisitos funcionais/não funcionais, relacionamentos UML e cerimônias Scrum',
+      monitoringWorkshop: 'clínica de modelagem UML e revisão comentada de questões discursivas e objetivas de processo de software',
+    };
+  }
+  if (n.includes('gerenciamento de projetos')) {
+    return {
+      area: 'Gestão de Projetos em TI',
+      criticalTopics: 'Termo de abertura, EAP/WBS, rede PERT/CPM (caminho crítico), gestão de riscos, EVM (valor agregado) e Ágil',
+      practicalTooling: 'MS Project / GanttProject, matrizes RACI/Riscos e planilhas de cálculo de caminho crítico e SPI/CPI',
+      facultyDiagnosticMethod: 'resolução guiada de redes PERT/CPM e estudos de caso de cálculo de índices de desempenho (CPI/SPI)',
+      studentPracticeFocus: 'cálculo de folgas e caminho crítico, construção de EAP e análise de respostas a riscos do projeto',
+      monitoringWorkshop: 'oficina de cálculo de caminho crítico e revisão de processos PMBOK vs. gestão ágil',
+    };
+  }
+  if (n.includes('historia') || n.includes('indigenas') || n.includes('afrodescendentes')) {
+    return {
+      area: 'Formação Humanística, Diversidade & Cidadania',
+      criticalTopics: 'História e cultura afro-brasileira e indígena, marcos legais (Leis 10.639/03 e 11.645/08), direitos e inclusão',
+      practicalTooling: 'textos-base comentados, seminários temáticos, análise documental e fóruns argumentativos no LMS',
+      facultyDiagnosticMethod: 'roteiros de leitura orientada com questões norteadoras e debates críticos conectados ao contexto atual',
+      studentPracticeFocus: 'leitura analítica dos textos obrigatórios no LMS, síntese conceitual e participação nos fóruns e simulados',
+      monitoringWorkshop: 'rodas de revisão textual e leitura interpretativa preparatória para avaliações objetivas e discursivas',
+    };
+  }
+
+  return {
+    area: 'Núcleo Tecnológico & Formação em Computação',
+    criticalTopics: `tópicos estruturantes e competências essenciais da ementa de ${item.name}`,
+    practicalTooling: 'ambientes laboratoriais, roteiros práticos guiados e banco de questões diagnósticas no LMS',
+    facultyDiagnosticMethod: 'mapeamento das questões de maior índice de erro e aula diagnóstica ativa sobre os pontos críticos',
+    studentPracticeFocus: 'resolução comentada dos exercícios estruturantes e conclusão integral das trilhas no LMS',
+    monitoringWorkshop: 'sessões dirigidas de monitoria para esclarecimento de dúvidas e revisão pré-avaliação',
+  };
+}
+
+function getCourseStageContext(semester: number, shift: string, totalStudents: number): {
+  stageLabel: string;
+  classScaleNote: string;
+  perStudentImpact: number;
+} {
+  const stageLabel =
+    semester <= 2
+      ? 'Ciclo Básico / Acolhimento (1º–2º sem.)'
+      : semester <= 5
+      ? 'Ciclo Intermediário / Núcleo Técnico (3º–5º sem.)'
+      : 'Ciclo Avançado / Pré-Conclusão (6º+ sem.)';
+
+  const perStudentImpact = totalStudents > 0 ? Number((100 / totalStudents).toFixed(1)) : 0;
+  const classScaleNote =
+    totalStudents <= 5
+      ? `Micro-turma (${totalStudents} discentes — cada aluno representa ${perStudentImpact}% dos indicadores, permitindo tutoria individualizada 1-a-1)`
+      : totalStudents <= 12
+      ? `Turma compacta (${totalStudents} discentes — cada aluno equivale a ~${perStudentImpact}%, ideal para acompanhamento nominal em aula)`
+      : `Turma ampla (${totalStudents} discentes — turno ${shift}, exigindo subgrupos de estudo e triagem escalonada)`;
+
+  return { stageLabel, classScaleNote, perStudentImpact };
+}
+
 export function getRecommendedPedagogicalAction(item: DisciplineMetric): string {
-  if (item.ars >= 65 || item.failureRate > 35) {
-    return 'Plano de Tutoria Intensiva, nivelamento de pré-requisitos e revisão de ementa avaliativa.';
+  const domain = resolveDisciplineDomain(item);
+  const adhAV = item.adhesionAV ?? item.lmsAdherenceRate;
+  const adhSM = item.adhesionSM ?? item.lmsAdherenceRate;
+
+  if (item.ars >= 65 || item.failureRate >= 25) {
+    return `Intervenção imediata em ${domain.area}: tutoria intensiva focada em ${domain.criticalTopics} e plano pré-AVS individualizado.`;
+  }
+  if (item.failureRate >= 15) {
+    return `Plano de recuperação pré-AVS em ${item.name}: diagnóstico dos erros parciais (${item.failureRate}% reprov.) com ${domain.facultyDiagnosticMethod}.`;
   }
   if (item.attendanceRate < 75) {
-    return 'Busca ativa discente, flexibilização assíncrona e engajamento via coordenação.';
+    return `Busca ativa emergencial contra reprovação por faltas (${item.attendanceRate}% freq.) e flexibilidade de reforço prático no LMS.`;
   }
-  if (item.lmsAdherenceRate < 60) {
-    return 'Capacitação docente para dinâmicas ativas no LMS e atividades formativas pontuadas.';
+  if (item.learningScore < 55) {
+    return `Nivelamento de aprendizagem (${item.learningScore}%) em ${domain.criticalTopics}, usando ${domain.practicalTooling}.`;
   }
-  if (item.studyHoursPerWeek < 4) {
-    return 'Orientação de estudos acadêmicos e criação de grupos de estudo com bolsistas.';
+  if (adhSM < 65 || item.lmsAdherenceRate < 70) {
+    return `Campanha tática de adesão aos simulados SM1/SM2 (${adhSM.toFixed(0)}% SM / ${adhAV.toFixed(0)}% AV) e roteiros práticos no LMS.`;
   }
-  return 'Monitoramento padrão e manutenção das boas práticas metodológicas.';
+  if (item.studyHoursPerWeek < 4.5) {
+    return `Estímulo à rotina de estudo (${item.studyTimeFormatted || `${item.studyHoursPerWeek}h`}) com downloads orientados (+52'/download) e monitoria em ${domain.area}.`;
+  }
+  return `Manutenção das boas práticas em ${domain.area} e potencialização de notas via ${domain.monitoringWorkshop}.`;
 }
 
 export interface DetailedPedagogicalDiagnostic {
@@ -351,6 +695,22 @@ export interface DetailedPedagogicalDiagnostic {
     badgeBorder: string;
   };
   executiveSummary: string;
+  disciplineAnalysis: {
+    thematicArea: string;
+    criticalTopics: string;
+    practicalTooling: string;
+    classProfile: string;
+    primaryBottleneck: {
+      indicator: string;
+      detail: string;
+      severity: 'Crítico' | 'Alerta' | 'Controlado';
+    };
+    protectiveStrength: {
+      indicator: string;
+      detail: string;
+    };
+    historicalNote: string;
+  };
   indicatorsDiagnosis: {
     learning: { status: 'Crítico' | 'Alerta' | 'Saudável'; label: string; text: string; value: string };
     failure: { status: 'Crítico' | 'Alerta' | 'Saudável'; label: string; text: string; value: string };
@@ -361,6 +721,12 @@ export interface DetailedPedagogicalDiagnostic {
     faculty: string[];
     coordination: string[];
     students: string[];
+    axisFocus: {
+      faculty: string;
+      coordination: string;
+      students: string;
+    };
+    expectedOutcome: string;
   };
   targets: {
     targetLearning: string;
@@ -370,7 +736,96 @@ export interface DetailedPedagogicalDiagnostic {
   };
 }
 
-export function getDetailedPedagogicalDiagnostic(item: DisciplineMetric): DetailedPedagogicalDiagnostic {
+export function getDetailedPedagogicalDiagnostic(
+  item: DisciplineMetric,
+  weights: FormulaWeights = DEFAULT_WEIGHTS
+): DetailedPedagogicalDiagnostic {
+  const domain = resolveDisciplineDomain(item);
+  const stage = getCourseStageContext(item.semester, item.shift, item.totalStudents);
+  const adhAV = item.adhesionAV ?? item.lmsAdherenceRate;
+  const adhSM = item.adhesionSM ?? item.lmsAdherenceRate;
+  const studyDisplay = item.studyTimeFormatted || `${item.studyHoursPerWeek.toFixed(1)}h`;
+  const affectedStudents = item.failureRate > 0 ? Math.max(1, Math.round((item.failureRate / 100) * item.totalStudents)) : 0;
+
+  // Compute weighted ARS risk contributions to pinpoint exact mathematical bottleneck
+  const infrequency = Number(Math.max(0, 100 - item.attendanceRate).toFixed(1));
+  const learningDeficit = Number(Math.max(0, 100 - item.learningScore).toFixed(1));
+  const riskFactors = [
+    {
+      key: 'failure',
+      indicator: 'Reprovação (Pulso 2.0)',
+      load: Number((item.failureRate * weights.ars.failureRate).toFixed(2)),
+      raw: item.failureRate,
+      detail:
+        item.failureRate > 0
+          ? `${item.failureRate.toFixed(1)}% de reprovação (~${affectedStudents} de ${item.totalStudents} discentes com nota < 6,0), gerando +${(item.failureRate * weights.ars.failureRate).toFixed(1)} pts no ARS.`
+          : `Reprovação zerada (0,0%), sem carga negativa de retenção no ARS.`,
+    },
+    {
+      key: 'learning',
+      indicator: 'Déficit de Aprendizagem',
+      load: Number((learningDeficit * weights.ars.learningDeficit).toFixed(2)),
+      raw: learningDeficit,
+      detail: `Grau de aprendizagem de ${item.learningScore.toFixed(1)}% (déficit de ${learningDeficit.toFixed(1)}% frente à nota esperada), respondendo por +${(learningDeficit * weights.ars.learningDeficit).toFixed(1)} pts no ARS.`,
+    },
+    {
+      key: 'attendance',
+      indicator: 'Assiduidade / Infrequência',
+      load: Number((infrequency * weights.ars.infrequency).toFixed(2)),
+      raw: infrequency,
+      detail: `Frequência de ${item.attendanceRate.toFixed(1)}% (infrequência de ${infrequency.toFixed(1)}%), adicionando +${(infrequency * weights.ars.infrequency).toFixed(1)} pts ao risco ARS.`,
+    },
+    {
+      key: 'dropout',
+      indicator: 'Evasão & Baixa Adesão AV/SM',
+      load: Number((item.dropoutRiskRate * weights.ars.dropoutRisk).toFixed(2)),
+      raw: item.dropoutRiskRate,
+      detail: `Risco de evasão em ${item.dropoutRiskRate.toFixed(1)}% com adesão de ${adhAV.toFixed(0)}% (AV) e ${adhSM.toFixed(0)}% (SM).`,
+    },
+  ].sort((a, b) => b.load - a.load);
+
+  const topRisk = riskFactors[0];
+  const bottleneckSeverity: 'Crítico' | 'Alerta' | 'Controlado' =
+    topRisk.load >= 8 || item.failureRate >= 20 || item.attendanceRate < 75 || item.learningScore < 50
+      ? 'Crítico'
+      : topRisk.load >= 4 || item.learningScore < 60 || item.attendanceRate < 80
+      ? 'Alerta'
+      : 'Controlado';
+
+  // Determine protective strength
+  const protectiveStrength =
+    item.failureRate === 0 && item.attendanceRate >= 85
+      ? {
+          indicator: 'Retenção Plena & Assiduidade',
+          detail: `Reprovação em 0,0% combinada a ${item.attendanceRate.toFixed(1)}% de frequência e ${studyDisplay} de dedicação.`,
+        }
+      : item.attendanceRate >= 82
+      ? {
+          indicator: 'Frequência Presencial Consolidada',
+          detail: `Presença de ${item.attendanceRate.toFixed(1)}% mantém o vínculo da turma em sala (${stage.stageLabel}).`,
+        }
+      : item.learningScore >= 62
+      ? {
+          indicator: 'Assimilação Conceitual Favorável',
+          detail: `Grau de aprendizagem de ${item.learningScore.toFixed(1)}% supera a média de referência da área.`,
+        }
+      : item.lmsAdherenceRate >= 80 || item.studyHoursPerWeek >= 6
+      ? {
+          indicator: 'Engajamento Digital & Tempo de Estudo',
+          detail: `Adesão LMS de ${item.lmsAdherenceRate.toFixed(1)}% e ${studyDisplay} de estudo sustentam o contato com o conteúdo.`,
+        }
+      : {
+          indicator: 'Aderência às Avaliações (AV)',
+          detail: `Participação de ${adhAV.toFixed(1)}% nas avaliações formais oferece base para intervenção rápida.`,
+        };
+
+  const historicalNote =
+    item.previousYearStudents !== undefined || item.previousYearStudyTime
+      ? `Comparativo A.A.: ${
+          item.previousYearStudents !== undefined ? `${item.previousYearStudents} → ${item.totalStudents} alunos` : `${item.totalStudents} alunos`
+        }${item.previousYearStudyTime ? ` · Tempo de estudo evoluiu de ${item.previousYearStudyTime} para ${studyDisplay}` : ''}.`
+      : `Turma do ${item.semester}º semestre (${item.shift}) com ${item.totalStudents} discentes e ${studyDisplay} de dedicação média acumulada.`;
+
   // 1. Priority determination
   let priority: DetailedPedagogicalDiagnostic['priority'];
   if (item.ars >= 65 || item.failureRate >= 30) {
@@ -382,7 +837,7 @@ export function getDetailedPedagogicalDiagnostic(item: DisciplineMetric): Detail
       badgeText: 'text-rose-800',
       badgeBorder: 'border-rose-300',
     };
-  } else if (item.ars >= 45 || item.failureRate >= 20 || item.learningScore < 50) {
+  } else if (item.ars >= 45 || item.failureRate >= 20 || item.learningScore < 50 || item.attendanceRate < 70) {
     priority = {
       level: 'Alto',
       label: 'Prioridade Alta (Ação Tática)',
@@ -391,7 +846,7 @@ export function getDetailedPedagogicalDiagnostic(item: DisciplineMetric): Detail
       badgeText: 'text-orange-800',
       badgeBorder: 'border-orange-300',
     };
-  } else if (item.ars >= 25 || item.learningScore < 60 || item.attendanceRate < 78) {
+  } else if (item.ars >= 25 || item.learningScore < 60 || item.attendanceRate < 78 || item.failureRate > 10) {
     priority = {
       level: 'Moderado',
       label: 'Atenção Preventiva (Monitoramento Ativo)',
@@ -411,91 +866,148 @@ export function getDetailedPedagogicalDiagnostic(item: DisciplineMetric): Detail
     };
   }
 
-  // 2. Executive narrative summary
-  let executiveSummary = `A turma de ${item.name} (${item.code} · Turma ${item.classCode}) sob docência de ${item.professor} apresenta LHI de ${item.lhi.toFixed(1)} pts (${getLHIStatus(item.lhi)}) e ARS de ${item.ars.toFixed(1)} pts (${getARSLevel(item.ars)}). `;
-  if (item.ars >= 65) {
-    executiveSummary += `O índice de risco está crítico, demandando tutoria intensiva imediata e reestruturação avaliativa antes do fechamento do semestre.`;
-  } else if (item.failureRate > 25) {
-    executiveSummary += `A taxa de reprovação de ${item.failureRate}% está acima do teto institucional, recomendando plantão de dúvidas focado em AVS e simulados SM.`;
-  } else if (item.learningScore < 55) {
-    executiveSummary += `Identificado déficit de aprendizagem (${(100 - item.learningScore).toFixed(1)}% abaixo da nota esperada), necessitando nivelamento prático dos tópicos centrais da ementa.`;
-  } else if (item.attendanceRate < 78) {
-    executiveSummary += `O ponto de maior atenção reside na assiduidade discente (${item.attendanceRate}%), exigindo busca ativa contra reprovação por faltas.`;
+  // 2. Executive narrative summary tailored to this specific discipline
+  let executiveSummary = `${item.name} (${item.code} · Turma ${item.classCode}, ${item.semester}º sem. ${item.shift}) — ${domain.area} — apresenta LHI ${item.lhi.toFixed(1)} pts (${getLHIStatus(item.lhi)}) e ARS ${item.ars.toFixed(1)} pts (${getARSLevel(item.ars)}) com ${item.totalStudents} discentes sob docência de ${item.professor}. `;
+  if (item.failureRate >= 20) {
+    executiveSummary += `O fator determinante é a reprovação de ${item.failureRate.toFixed(1)}% (~${affectedStudents} aluno(s) abaixo de 6,0 na expressão Pulso 2.0), aliada a ${item.learningScore.toFixed(1)}% de aprendizagem em ${domain.criticalTopics}.`;
+  } else if (item.attendanceRate < 75) {
+    executiveSummary += `O principal ponto de vulnerabilidade é a assiduidade de ${item.attendanceRate.toFixed(1)}% (abaixo do piso de 75%/80%), elevando o risco de reprovação por faltas e exigindo busca ativa imediata.`;
+  } else if (item.learningScore < 52) {
+    executiveSummary += `A principal lacuna reside no grau de aprendizagem (${item.learningScore.toFixed(1)}%), demandando reforço prático em ${domain.criticalTopics} com apoio de ${domain.practicalTooling}.`;
+  } else if (adhSM < 65) {
+    executiveSummary += `Embora a retenção esteja controlada (${item.failureRate.toFixed(1)}% reprov.), a adesão aos simulados SM (${adhSM.toFixed(1)}%) limita a margem de segurança da nota final.`;
   } else {
-    executiveSummary += `A disciplina demonstra indicadores equilibrados, com frequência favorável (${item.attendanceRate}%) e boa adesão às dinâmicas acadêmicas (${item.lmsAdherenceRate}%).`;
+    executiveSummary += `A turma opera em trajetória estável (${item.attendanceRate.toFixed(1)}% frequência, ${item.failureRate.toFixed(1)}% reprovação), podendo elevar ainda mais o LHI expandindo a pontuação nos simulados SM (${adhSM.toFixed(1)}%).`;
   }
 
   // 3. Multidimensional indicator diagnostics
   const learnStatus: 'Crítico' | 'Alerta' | 'Saudável' = item.learningScore < 50 ? 'Crítico' : item.learningScore < 65 ? 'Alerta' : 'Saudável';
   const learnText = item.learningScore < 50
-    ? `Déficit acentuado de ${(100 - item.learningScore).toFixed(1)}% nas provas em relação à nota esperada. Alunos com dificuldade nos tópicos estruturantes.`
+    ? `Déficit de ${(100 - item.learningScore).toFixed(1)}% nas provas em ${domain.area}. Focar nivelamento imediato em ${domain.criticalTopics}.`
     : item.learningScore < 65
-    ? `Grau de aprendizagem moderado (${item.learningScore}%). Necessita reforço de exercícios e nivelamento pré-AV.`
-    : `Grau de aprendizagem satisfatório (${item.learningScore}%), demonstrando assimilação dos conteúdos programáticos.`;
+    ? `Aprendizagem intermediária (${item.learningScore.toFixed(1)}%). Reforçar ${domain.criticalTopics} antes das próximas etapas avaliativas.`
+    : `Bom domínio conceitual (${item.learningScore.toFixed(1)}%) nos conteúdos de ${domain.area}.`;
 
   const failStatus: 'Crítico' | 'Alerta' | 'Saudável' = item.failureRate >= 25 ? 'Crítico' : item.failureRate >= 15 ? 'Alerta' : 'Saudável';
   const failText = item.failureRate >= 25
-    ? `Reprovação em patamar crítico (${item.failureRate}% no Pulso 2.0). Expressão maior(AV, NC, AVS) + SM < 6 ameaça a retenção da turma.`
+    ? `Reprovação elevada (${item.failureRate.toFixed(1)}% ≈ ${affectedStudents} aluno(s) com maior(AV, NC, AVS) + SM < 6). Prioridade máxima pré-AVS.`
     : item.failureRate >= 15
-    ? `Taxa de reprovação em alerta (${item.failureRate}%). Monitorar alunos na faixa de nota 4.0 a 5.9 antes da AVS.`
-    : `Índice de reprovação controlado (${item.failureRate}%), dentro da meta de retenção institucional.`;
+    ? `Reprovação em alerta (${item.failureRate.toFixed(1)}% ≈ ${affectedStudents} aluno(s)). Recuperação viável com AVS + bônus de SM1/SM2.`
+    : item.failureRate > 0
+    ? `Reprovação sob controle (${item.failureRate.toFixed(1)}% ≈ ${affectedStudents} aluno(s)). Monitorar caso(s) pontual(is) antes do fechamento.`
+    : `Reprovação zerada (0,0%) na apuração Pulso 2.0 até o momento.`;
 
   const attStatus: 'Crítico' | 'Alerta' | 'Saudável' = item.attendanceRate < 75 ? 'Crítico' : item.attendanceRate < 80 ? 'Alerta' : 'Saudável';
   const attText = item.attendanceRate < 75
-    ? `Assiduidade crítica (${item.attendanceRate}%). Risco elevado de reprovação por frequência (RF) e desengajamento presencial.`
+    ? `Assiduidade crítica (${item.attendanceRate.toFixed(1)}%) no turno ${item.shift}. Risco iminente de reprovação por frequência regulamentar.`
     : item.attendanceRate < 80
-    ? `Frequência limítrofe (${item.attendanceRate}%). Recomenda-se acompanhamento de alunos faltosos recorrentes.`
-    : `Presença consolidada (${item.attendanceRate}%), atuando como importante fator de proteção e engajamento.`;
+    ? `Frequência limítrofe (${item.attendanceRate.toFixed(1)}%). Acompanhar faltas recorrentes na turma ${item.classCode}.`
+    : `Presença sólida (${item.attendanceRate.toFixed(1)}%), sustentando o acompanhamento contínuo das aulas.`;
 
-  const engStatus: 'Crítico' | 'Alerta' | 'Saudável' = (item.lmsAdherenceRate < 60 || item.studyHoursPerWeek < 3) ? 'Crítico' : item.lmsAdherenceRate < 75 ? 'Alerta' : 'Saudável';
-  const engText = (item.lmsAdherenceRate < 60 || item.studyHoursPerWeek < 3)
-    ? `Baixa adesão virtual (${item.lmsAdherenceRate}%) e poucas horas de dedicação (${item.studyTimeFormatted || `${item.studyHoursPerWeek}h`}). Alunos não realizam simulados.`
-    : item.lmsAdherenceRate < 75
-    ? `Adesão intermediária ao LMS (${item.lmsAdherenceRate}%). Há potencial para ampliar a realização dos simulados SM1 e SM2.`
-    : `Excelente adesão ao ambiente virtual (${item.lmsAdherenceRate}%) com bom tempo de estudo acumulado (${item.studyTimeFormatted || `${item.studyHoursPerWeek}h`}).`;
+  const engStatus: 'Crítico' | 'Alerta' | 'Saudável' = (item.lmsAdherenceRate < 60 || item.studyHoursPerWeek < 3.5) ? 'Crítico' : (item.lmsAdherenceRate < 78 || adhSM < 65) ? 'Alerta' : 'Saudável';
+  const engText = (item.lmsAdherenceRate < 60 || item.studyHoursPerWeek < 3.5)
+    ? `Baixo engajamento virtual (${item.lmsAdherenceRate.toFixed(1)}% LMS · ${studyDisplay}). Baixa realização de simulados e downloads.`
+    : (item.lmsAdherenceRate < 78 || adhSM < 65)
+    ? `Adesão AV de ${adhAV.toFixed(1)}% e SM de ${adhSM.toFixed(1)}% (${studyDisplay} estudo). Margem clara para ampliar pontos extras em SM1/SM2.`
+    : `Engajamento consistente (${item.lmsAdherenceRate.toFixed(1)}% LMS · ${adhAV.toFixed(0)}% AV / ${adhSM.toFixed(0)}% SM · ${studyDisplay}).`;
 
-  // 4. Action plan tailored to the discipline and metrics
-  const isNetworkingOrSystems = /redes|protocolos|sistemas|infraestrutura|arquitetura/i.test(item.name);
-  const isCodingOrMath = /algoritmo|programa|dados|software|lógica|cálculo|estrutura/i.test(item.name);
-  const isManagementOrGov = /engenharia|governança|gestão|qualidade|segurança|projeto/i.test(item.name);
+  // 4. Personalized "Plano de Ação Tático Operacional (3 Eixos Integrados)" for THIS exact discipline
+  const facultyAxisFocus =
+    item.failureRate >= 15
+      ? `Reverter reprovação (${item.failureRate.toFixed(1)}%) via ${domain.area}`
+      : item.learningScore < 55
+      ? `Elevar aprendizagem (${item.learningScore.toFixed(1)}% → ≥65%)`
+      : `Consolidar proficiência e simulados SM em ${item.code}`;
 
-  const facultyAction1 = isNetworkingOrSystems
-    ? `Aulas práticas em laboratório com simuladores (ex: Cisco Packet Tracer / Wireshark) para consolidar a teoria dos protocolos.`
-    : isCodingOrMath
-    ? `Plantão de resolução comentada de código/algoritmos com foco em casos de teste reais e depuração passo a passo.`
-    : isManagementOrGov
-    ? `Metodologias ativas com estudos de caso corporativos reais e dinâmicas de tomada de decisão em equipe.`
-    : `Mapeamento das questões de prova com maior índice de erro para aplicação de aula diagnóstica de revisão pré-avaliação.`;
+  const coordAxisFocus =
+    item.attendanceRate < 75 || item.dropoutRiskRate >= 3
+      ? `Busca ativa & retenção nominal (${item.totalStudents} discentes)`
+      : item.totalStudents <= 5
+      ? `Mentoria de micro-turma (${item.totalStudents} alunos) & NDE`
+      : `Governança de fluxo avaliativo & adesão AV/SM`;
 
-  const facultyAction2 = item.failureRate >= 20
-    ? `Disponibilização de lista preparatória comentada para a AVS, reforçando os 3 tópicos com pior desempenho nas avaliações parciais.`
-    : `Incentivo contínuo à realização dos Simulados SM1 e SM2 como instrumento diagnóstico de aprendizagem e bonificação na nota.`;
+  const studentAxisFocus =
+    adhSM < 68 || item.studyHoursPerWeek < 5
+      ? `Elevar SM (${adhSM.toFixed(0)}% → ≥80%) e estudo (+52'/download)`
+      : `Monitoria dirigida & consolidação para AV/AVS`;
 
-  const facultyAction3 = `Feedback pedagógico formativo individualizado aos alunos que obtiveram pontuação inferior a 6.0 pontos.`;
+  // Eixo 1: Docente (tailored to syllabus, tools, failureRate, learningScore, and class size)
+  const facultyAction1 = `Aplicar ${domain.facultyDiagnosticMethod} utilizando ${domain.practicalTooling}, com foco nos tópicos de ${domain.criticalTopics}.`;
 
-  const coordAction1 = (item.dropoutRiskRate > 5 || item.failureRate >= 20)
-    ? `Acionamento de busca ativa e contato telefônico/WhatsApp com discentes que não realizaram AV ou com risco iminente de abandono.`
-    : `Alinhamento pedagógico mensal com o docente ${item.professor} para monitorar a curva de rendimento e fechamento das etapas.`;
+  const facultyAction2 =
+    item.failureRate >= 15
+      ? `Mapear nominalmente os ~${affectedStudents} discente(s) abaixo de 6,0 na turma ${item.classCode} e aplicar roteiro preparatório comentado para AVS/NC cobrindo os 3 erros recorrentes da AV.`
+      : item.learningScore < 58
+      ? `Inserir micro-exercícios diagnósticos semanais (15 min em sala) sobre ${domain.criticalTopics}, corrigindo em tempo real antes da próxima prova oficial.`
+      : `Disponibilizar lista comentada de aprofundamento em ${domain.area} e articular a resolução de questões-modelo dos simulados SM1 e SM2 em aula.`;
 
-  const coordAction2 = item.attendanceRate < 80
-    ? `Emissão de alerta formal de frequência para os discentes que ultrapassaram 15% de faltas regulamentares.`
-    : `Validação do lançamento tempestivo de frequências e notas parciais no sistema acadêmico institucional.`;
+  const facultyAction3 =
+    adhSM < 70
+      ? `Integrar os Simulados SM1 e SM2 ao plano de aula da turma ${item.classCode}, sinalizando aos ${item.totalStudents} alunos como os +2,0 pts do SM fecham a expressão maior(AV, NC, AVS) + SM.`
+      : `Registrar feedback formativo individual para alunos na faixa limítrofe (nota 5,0 a 6,5) e alinhar os tópicos da semana com a Monitoria de TI.`;
 
-  const coordAction3 = `Pauta de acompanhamento prioritário da turma na próxima reunião de Colegiado de Curso / NDE.`;
+  // Eixo 2: Coordenação de Curso (tailored to campus, shift, class size, attendance, dropout, historical A.A.)
+  const coordAction1 =
+    item.totalStudents <= 5 && (item.failureRate > 0 || item.dropoutRiskRate > 0)
+      ? `Aproveitar o porte de micro-turma (${item.totalStudents} alunos em ${item.classCode}, ${item.campus || 'Campus'}) para contato nominal imediato com o(s) ${Math.max(1, affectedStudents)} discente(s) em risco e encaminhamento para trilha de recuperação.`
+      : item.attendanceRate < 78 || item.dropoutRiskRate >= 3
+      ? `Acionar busca ativa via telefone/WhatsApp na turma ${item.classCode} (${item.shift}) para discentes com faltas consecutivas ou sem acesso recente ao LMS (${item.attendanceRate.toFixed(1)}% freq.).`
+      : `Realizar check-in quinzenal com ${item.professor} validando o avanço de aprendizagem (${item.learningScore.toFixed(1)}%) e a redução de defasagens em ${domain.area}.`;
 
-  const studentAction1 = `Convocação e direcionamento dos discentes com dificuldades para a Monitoria Acadêmica orientada por bolsistas de TI.`;
-  const studentAction2 = `Estímulo intensivo à conclusão dos Simulados SM1 e SM2 na plataforma LMS (pontuação de até 2.0 pontos na composição final).`;
-  const studentAction3 = `Orientação de rotina de estudos com download dos roteiros de aula e materiais complementares (+52 min por download computados no Pulso).`;
+  const coordAction2 =
+    item.attendanceRate < 78
+      ? `Emitir alerta preventivo de frequência para alunos com ≥15% de ausências no ${item.semester}º semestre e revisar eventuais choques de horário do turno ${item.shift}.`
+      : `Auditar o lançamento tempestivo de frequências e notas parciais no SIA/LMS e acompanhar o saldo entre Adesão AV (${adhAV.toFixed(0)}%) e Adesão SM (${adhSM.toFixed(0)}%).`;
 
-  // 5. Recovery KPI Targets
+  const coordAction3 =
+    item.semester <= 2
+      ? `Pautar ${item.name} (${item.code}) no NDE como disciplina estruturante de calouros (${stage.stageLabel}), conectando o histórico (${item.previousYearStudents ? `${item.previousYearStudents}→${item.totalStudents} alunos` : `${item.totalStudents} alunos`}) à alocação de monitores.`
+      : `Incluir os indicadores de ${item.code} (${item.classCode}) no painel do Colegiado de ${item.course}, definindo meta de ${item.failureRate > 0 ? 'zerar reprovação residual' : 'manter 0% reprovação'} até o fechamento do período.`;
+
+  // Eixo 3: Discentes & Monitoria (tailored to specific workshop, study time, SM adhesion, downloads)
+  const studentAction1 = `Convocar a turma ${item.classCode} para ${domain.monitoringWorkshop}, priorizando ${domain.studentPracticeFocus}.`;
+
+  const studentAction2 =
+    adhSM < 75
+      ? `Cumprir meta coletiva de elevar a Adesão SM de ${adhSM.toFixed(1)}% para ≥80% concluindo SM1 e SM2 no prazo (garantindo até +2,0 pts na média final Pulso 2.0).`
+      : `Manter engajamento nos simulados SM1/SM2 (${adhSM.toFixed(1)}% atual) e utilizar o banco de questões do LMS para elevar o Grau de Aprendizagem acima de ${Math.max(65, Math.round(item.learningScore + 10))}%.`;
+
+  const studentAction3 =
+    item.studyHoursPerWeek < 6
+      ? `Adotar rotina semanal de estudo no LMS (meta elevar de ${studyDisplay} para ≥07:00) com download organizado dos roteiros e listas de ${item.code} (+52 min computados no Pulso por download).`
+      : `Consolidar grupos de estudo entre pares da turma ${item.classCode} compartilhando roteiros práticos em ${domain.practicalTooling} e mantendo os downloads semanais no LMS (${studyDisplay} atuais).`;
+
+  // 5. Recovery KPI Targets calibrated to current metrics
   const targetLearning = `≥ ${Math.max(65, Math.min(85, Math.round(item.learningScore + 10)))}%`;
-  const targetFailure = `≤ ${Math.max(10, Math.min(18, Math.round(item.failureRate * 0.75)))}%`;
-  const targetAttendance = `≥ 80.0%`;
-  const targetLms = `≥ 85.0%`;
+  const targetFailure =
+    item.failureRate === 0
+      ? '0,0% (Manter)'
+      : `≤ ${Math.max(0, Math.min(12, Math.round(item.failureRate * 0.5)))}%`;
+  const targetAttendance = item.attendanceRate >= 82 ? `≥ ${Math.min(92, Math.round(item.attendanceRate + 3))}.0%` : '≥ 80.0%';
+  const targetLms = item.lmsAdherenceRate >= 85 ? `≥ ${Math.min(95, Math.round(item.lmsAdherenceRate + 3))}%` : '≥ 85.0%';
+
+  const projectedLhi = Math.min(
+    95,
+    Number((item.lhi + (item.failureRate > 10 ? 7.5 : 4.2) + (item.learningScore < 60 ? 3.5 : 1.5)).toFixed(1))
+  );
+  const expectedOutcome = `Com a execução sincronizada dos 3 eixos na turma ${item.classCode}, projeta-se elevar o LHI de ${item.lhi.toFixed(1)} para ~${projectedLhi.toFixed(1)} pts e manter/reduzir o ARS (atual ${item.ars.toFixed(1)} pts) para a faixa controlada (<25 pts).`;
 
   return {
     priority,
     executiveSummary,
+    disciplineAnalysis: {
+      thematicArea: domain.area,
+      criticalTopics: domain.criticalTopics,
+      practicalTooling: domain.practicalTooling,
+      classProfile: `${stage.stageLabel} · ${stage.classScaleNote}`,
+      primaryBottleneck: {
+        indicator: topRisk.indicator,
+        detail: topRisk.detail,
+        severity: bottleneckSeverity,
+      },
+      protectiveStrength,
+      historicalNote,
+    },
     indicatorsDiagnosis: {
       learning: { status: learnStatus, label: 'Grau de Aprendizagem', text: learnText, value: `${item.learningScore.toFixed(1)}%` },
       failure: { status: failStatus, label: 'Reprovação Pulso 2.0', text: failText, value: `${item.failureRate.toFixed(1)}%` },
@@ -506,6 +1018,12 @@ export function getDetailedPedagogicalDiagnostic(item: DisciplineMetric): Detail
       faculty: [facultyAction1, facultyAction2, facultyAction3],
       coordination: [coordAction1, coordAction2, coordAction3],
       students: [studentAction1, studentAction2, studentAction3],
+      axisFocus: {
+        faculty: facultyAxisFocus,
+        coordination: coordAxisFocus,
+        students: studentAxisFocus,
+      },
+      expectedOutcome,
     },
     targets: {
       targetLearning,

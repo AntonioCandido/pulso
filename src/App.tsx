@@ -10,6 +10,9 @@ import { DisciplineMetric, SystemConfig, AcademicCourse, FormulaWeights, ImportS
 import { INITIAL_SYSTEM_CONFIG, getPulsoImparDisciplines } from './data/mockAcademicData';
 import { exportAnalyticalWorkbook, exportPowerPointDeck } from './utils/calculations';
 
+const normalizeProfessorName = (name?: string) =>
+  name ? name.replace(/Prof\.\s*Dr\.\s*Antônio\s*Cândido/gi, 'Prof. Antônio Cândido') : name;
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
 
@@ -52,12 +55,16 @@ export default function App() {
             ) {
               return getPulsoImparDisciplines().map(d => ({
                 ...d,
+                professor: normalizeProfessorName(d.professor) || d.professor,
                 importId: parsedSession.importId,
                 sourceFileOrUrl: parsedSession.fileName,
               }));
             }
           }
-          return parsed;
+          return parsed.map((d: DisciplineMetric) => ({
+            ...d,
+            professor: normalizeProfessorName(d.professor) || d.professor,
+          }));
         }
       }
     } catch (e) {
@@ -134,6 +141,7 @@ export default function App() {
     // 1. Tag all new items with the new unique importId and timestamp
     const taggedItems = newItems.map((item) => ({
       ...item,
+      professor: normalizeProfessorName(item.professor) || item.professor,
       importId: sessionMeta.importId,
       lastUpdated: sessionMeta.importedAt,
     }));

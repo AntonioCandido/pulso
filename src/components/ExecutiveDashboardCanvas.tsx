@@ -1,6 +1,30 @@
 import React, { useState } from 'react';
-import { Clock, Calendar, MapPin, Database, Info, X, AlertTriangle, CheckCircle2, ShieldAlert, Lightbulb } from 'lucide-react';
+import {
+  Clock,
+  Calendar,
+  MapPin,
+  Database,
+  Info,
+  X,
+  AlertTriangle,
+  CheckCircle2,
+  ShieldAlert,
+  BookOpen,
+  Check,
+  CheckCircle,
+  Copy,
+  GraduationCap,
+  ListChecks,
+  School,
+  Sparkles,
+  Users,
+} from 'lucide-react';
 import { DisciplineMetric, SystemConfig, ImportSession } from '../types';
+import {
+  DEFAULT_WEIGHTS,
+  getDetailedPedagogicalDiagnostic,
+  getRecommendedPedagogicalAction,
+} from '../utils/calculations';
 
 export interface ExecutiveDashboardCanvasProps {
   disciplines: DisciplineMetric[];
@@ -18,6 +42,7 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
   isPrintMode = false,
 }) => {
   const [selectedRiskItem, setSelectedRiskItem] = useState<DisciplineMetric | null>(null);
+  const [copiedExecPlan, setCopiedExecPlan] = useState(false);
   const hasData = disciplines.length > 0;
   const primaryDiscipline = disciplines[0];
   const executive = primaryDiscipline?.executiveSummary;
@@ -968,35 +993,44 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
           );
         }
 
-        // Plano de solução direcionado aos fatores reais da disciplina
-        const solutionSteps: { title: string; detail: string }[] = [];
-        if (selectedRiskItem.learningScore < 60 || selectedRiskItem.failureRate >= 15) {
-          solutionSteps.push({
-            title: 'Nivelamento Avaliativo e Revisão de Questões (AV / NC / AVS + SM1/SM2)',
-            detail:
-              'Realizar revisão orientada dos tópicos com menor taxa de acerto antes das avaliações oficiais e incentivar a conclusão integral dos simulados SM1 e SM2 (que somam até 2,0 pontos na expressão da nota final do Pulso 2.0).',
-          });
-        }
-        if (selectedRiskItem.studyHoursPerWeek < 6.0) {
-          solutionSteps.push({
-            title: 'Ampliação do Tempo de Estudo e Engajamento Digital',
-            detail:
-              "Promover roteiros semanais de estudo na trilha digital da disciplina e disponibilizar materiais estruturados para download (cada download contabiliza +52' na métrica oficial de Tempo de Estudo do Pulso Acadêmico).",
-          });
-        }
-        if (selectedRiskItem.attendanceRate < 80) {
-          solutionSteps.push({
-            title: 'Busca Ativa e Monitoramento de Presença Discente',
-            detail:
-              `Acompanhar os ${selectedRiskItem.totalStudents} alunos matriculados na disciplina para elevar a frequência atual (${selectedRiskItem.attendanceRate.toFixed(1)}%) até a meta institucional de 80,00%, reduzindo o impacto da infrequência no ARS.`,
-          });
-        }
-        solutionSteps.push({
-          title: 'Diretriz Pedagógica Consolidada da Coordenação',
-          detail:
-            selectedRiskItem.recommendedAction ||
-            'Manter acompanhamento contínuo dos indicadores de aprendizagem, frequência e engajamento nos simulados e avaliações.',
-        });
+        const fullWeights = config.weights || DEFAULT_WEIGHTS;
+        const diag = getDetailedPedagogicalDiagnostic(selectedRiskItem, fullWeights);
+        const headlineAction = getRecommendedPedagogicalAction(selectedRiskItem);
+
+        const handleCopyExecTacticalPlan = () => {
+          const text = [
+            `ANÁLISE & PLANO DE AÇÃO TÁTICO OPERACIONAL — ${selectedRiskItem.name} (${selectedRiskItem.code})`,
+            `Turma: ${selectedRiskItem.classCode} · ${selectedRiskItem.course} (${selectedRiskItem.semester}º sem. · ${selectedRiskItem.shift}) · Docente: ${selectedRiskItem.professor}`,
+            `LHI: ${selectedRiskItem.lhi.toFixed(1)} pts | ARS: ${selectedRiskItem.ars.toFixed(1)} pts | Alunos: ${selectedRiskItem.totalStudents}`,
+            ``,
+            `1. DIAGNÓSTICO & ANÁLISE CURRICULAR`,
+            `• Diretriz Prioritária: ${headlineAction}`,
+            `• Área Temática: ${diag.disciplineAnalysis.thematicArea}`,
+            `• Conteúdos Críticos: ${diag.disciplineAnalysis.criticalTopics}`,
+            `• Ferramental Prático: ${diag.disciplineAnalysis.practicalTooling}`,
+            `• Gargalo Prioritário: ${diag.disciplineAnalysis.primaryBottleneck.indicator} (${diag.disciplineAnalysis.primaryBottleneck.severity}) — ${diag.disciplineAnalysis.primaryBottleneck.detail}`,
+            `• Alavanca / Ponto Forte: ${diag.disciplineAnalysis.protectiveStrength.indicator} — ${diag.disciplineAnalysis.protectiveStrength.detail}`,
+            `• Perfil & Histórico: ${diag.disciplineAnalysis.classProfile} | ${diag.disciplineAnalysis.historicalNote}`,
+            ``,
+            `2. PLANO DE AÇÃO TÁTICO OPERACIONAL (3 EIXOS INTEGRADOS)`,
+            `[Eixo Docente — ${selectedRiskItem.professor}]`,
+            `  Foco: ${diag.actionPlan.axisFocus.faculty}`,
+            ...diag.actionPlan.faculty.map((a) => `  - ${a}`),
+            ``,
+            `[Coordenação de Curso — ${selectedRiskItem.course} · Turma ${selectedRiskItem.classCode}]`,
+            `  Foco: ${diag.actionPlan.axisFocus.coordination}`,
+            ...diag.actionPlan.coordination.map((a) => `  - ${a}`),
+            ``,
+            `[Discentes & Monitoria — ${selectedRiskItem.totalStudents} alunos]`,
+            `  Foco: ${diag.actionPlan.axisFocus.students}`,
+            ...diag.actionPlan.students.map((a) => `  - ${a}`),
+            ``,
+            `Resultado Integrado Esperado: ${diag.actionPlan.expectedOutcome}`,
+          ].join('\n');
+          navigator.clipboard.writeText(text);
+          setCopiedExecPlan(true);
+          setTimeout(() => setCopiedExecPlan(false), 2000);
+        };
 
         return (
           <div
@@ -1004,7 +1038,7 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
             onClick={() => setSelectedRiskItem(null)}
           >
             <div
-              className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-2xl w-full overflow-hidden animate-in fade-in zoom-in duration-150 text-xs"
+              className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-4xl w-full overflow-hidden animate-in fade-in zoom-in duration-150 text-xs"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Cabeçalho do Modal com a cor semântica do Nível de Risco */}
@@ -1137,30 +1171,179 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
                   </div>
                 </div>
 
-                {/* 2. Solução Recomendada para o Problema */}
-                <div className="space-y-3">
-                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                    <Lightbulb className="w-4 h-4 text-amber-600" />
-                    <span>2. Solução Recomendada e Plano de Ação Pedagógica</span>
-                  </h4>
+                {/* 2. Análise Personalizada da Disciplina */}
+                <div className="space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-[#0A3977]" />
+                      <span>2. Análise Personalizada da Disciplina · {diag.disciplineAnalysis.thematicArea}</span>
+                    </h4>
+                    <span className="text-[10px] font-medium text-slate-500">
+                      {diag.disciplineAnalysis.historicalNote}
+                    </span>
+                  </div>
 
-                  <div className="space-y-2.5">
-                    {solutionSteps.map((step, idx) => (
-                      <div
-                        key={idx}
-                        className="p-3.5 rounded-xl bg-blue-50/60 border border-blue-200/80 text-slate-800"
-                      >
-                        <div className="font-bold text-[#0A3977] flex items-center gap-2">
-                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#0A3977] text-white text-[10px] font-extrabold shrink-0">
-                            {idx + 1}
-                          </span>
-                          <span>{step.title}</span>
-                        </div>
-                        <p className="text-slate-700 mt-1 pl-7 leading-relaxed">
-                          {step.detail}
-                        </p>
+                  <div className="p-3 rounded-lg bg-amber-50/80 border border-amber-200 text-amber-950 space-y-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold text-amber-900">Diretriz Prioritária de Intervenção</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${diag.priority.badgeBg} ${diag.priority.badgeText} ${diag.priority.badgeBorder}`}>
+                        {diag.priority.label}
+                      </span>
+                    </div>
+                    <p className="text-xs font-semibold text-amber-950 leading-relaxed">{headlineAction}</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-[11px]">
+                    <div className={`p-3 rounded-lg border ${
+                      diag.disciplineAnalysis.primaryBottleneck.severity === 'Crítico'
+                        ? 'bg-rose-50/70 border-rose-200'
+                        : diag.disciplineAnalysis.primaryBottleneck.severity === 'Alerta'
+                        ? 'bg-amber-50/70 border-amber-200'
+                        : 'bg-slate-50 border-slate-200'
+                    }`}>
+                      <div className="font-bold text-slate-900 flex items-center justify-between gap-2">
+                        <span>Gargalo Prioritário: {diag.disciplineAnalysis.primaryBottleneck.indicator}</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          diag.disciplineAnalysis.primaryBottleneck.severity === 'Crítico'
+                            ? 'bg-rose-100 text-rose-800'
+                            : diag.disciplineAnalysis.primaryBottleneck.severity === 'Alerta'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-emerald-100 text-emerald-800'
+                        }`}>
+                          {diag.disciplineAnalysis.primaryBottleneck.severity}
+                        </span>
                       </div>
-                    ))}
+                      <p className="text-slate-700 mt-1 leading-relaxed">
+                        {diag.disciplineAnalysis.primaryBottleneck.detail}
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-emerald-50/60 border border-emerald-200">
+                      <div className="font-bold text-emerald-950 flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>Alavanca / Ponto Forte: {diag.disciplineAnalysis.protectiveStrength.indicator}</span>
+                      </div>
+                      <p className="text-emerald-900/90 mt-1 leading-relaxed">
+                        {diag.disciplineAnalysis.protectiveStrength.detail}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-slate-700">
+                    <div>
+                      <strong className="text-slate-900">Conteúdos Críticos da Ementa:</strong>{' '}
+                      {diag.disciplineAnalysis.criticalTopics}.
+                    </div>
+                    <div>
+                      <strong className="text-slate-900">Perfil da Turma & Ferramental:</strong>{' '}
+                      {diag.disciplineAnalysis.classProfile}. Ferramentas: <em>{diag.disciplineAnalysis.practicalTooling}</em>.
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Plano de Ação Tático Operacional (3 Eixos Integrados) */}
+                <div className="space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                      <ListChecks className="w-4 h-4 text-[#0A3977]" />
+                      <span>3. Plano de Ação Tático Operacional (3 Eixos Integrados) · {selectedRiskItem.code}</span>
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={handleCopyExecTacticalPlan}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-[#0A3977] font-semibold rounded-md transition-colors cursor-pointer text-[11px] shadow-2xs"
+                    >
+                      {copiedExecPlan ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          <span className="text-emerald-700">Plano Copiado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          <span>Copiar Plano Tático</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                    <div className="p-3 bg-white rounded-lg border border-slate-200 flex flex-col gap-2 shadow-2xs">
+                      <div className="pb-1.5 border-b border-slate-100">
+                        <div className="flex items-center gap-1.5">
+                          <GraduationCap className="w-4 h-4 text-[#0A3977] shrink-0" />
+                          <span className="font-bold text-xs text-slate-900">Eixo Docente</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5 truncate" title={selectedRiskItem.professor}>
+                          {selectedRiskItem.professor}
+                        </div>
+                      </div>
+                      <div className="px-2 py-1 rounded bg-blue-50/80 border border-blue-100 text-[10px] font-semibold text-[#0A3977] leading-snug">
+                        Foco: {diag.actionPlan.axisFocus.faculty}
+                      </div>
+                      <ul className="space-y-1.5 text-[11px] text-slate-700 flex-1">
+                        {diag.actionPlan.faculty.map((act, i) => (
+                          <li key={i} className="flex items-start gap-1.5 leading-relaxed">
+                            <span className="text-[#0A3977] font-bold shrink-0 mt-0.5">•</span>
+                            <span>{act}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="p-3 bg-white rounded-lg border border-slate-200 flex flex-col gap-2 shadow-2xs">
+                      <div className="pb-1.5 border-b border-slate-100">
+                        <div className="flex items-center gap-1.5">
+                          <School className="w-4 h-4 text-[#0A3977] shrink-0" />
+                          <span className="font-bold text-xs text-slate-900">Coordenação de Curso</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5 truncate" title={`${selectedRiskItem.course} · ${selectedRiskItem.classCode}`}>
+                          {selectedRiskItem.course} · Turma {selectedRiskItem.classCode}
+                        </div>
+                      </div>
+                      <div className="px-2 py-1 rounded bg-blue-50/80 border border-blue-100 text-[10px] font-semibold text-[#0A3977] leading-snug">
+                        Foco: {diag.actionPlan.axisFocus.coordination}
+                      </div>
+                      <ul className="space-y-1.5 text-[11px] text-slate-700 flex-1">
+                        {diag.actionPlan.coordination.map((act, i) => (
+                          <li key={i} className="flex items-start gap-1.5 leading-relaxed">
+                            <span className="text-[#0A3977] font-bold shrink-0 mt-0.5">•</span>
+                            <span>{act}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="p-3 bg-white rounded-lg border border-slate-200 flex flex-col gap-2 shadow-2xs">
+                      <div className="pb-1.5 border-b border-slate-100">
+                        <div className="flex items-center gap-1.5">
+                          <Users className="w-4 h-4 text-emerald-700 shrink-0" />
+                          <span className="font-bold text-xs text-slate-900">Discentes & Monitoria</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          {selectedRiskItem.totalStudents} {selectedRiskItem.totalStudents === 1 ? 'aluno' : 'alunos'} · {selectedRiskItem.semester}º sem. ({selectedRiskItem.shift})
+                        </div>
+                      </div>
+                      <div className="px-2 py-1 rounded bg-emerald-50/80 border border-emerald-100 text-[10px] font-semibold text-emerald-800 leading-snug">
+                        Foco: {diag.actionPlan.axisFocus.students}
+                      </div>
+                      <ul className="space-y-1.5 text-[11px] text-slate-700 flex-1">
+                        {diag.actionPlan.students.map((act, i) => (
+                          <li key={i} className="flex items-start gap-1.5 leading-relaxed">
+                            <span className="text-emerald-700 font-bold shrink-0 mt-0.5">•</span>
+                            <span>{act}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="px-3 py-2 rounded-lg bg-[#0A3977]/5 border border-[#0A3977]/15 text-[11px] text-slate-700 flex items-start gap-2">
+                    <Sparkles className="w-3.5 h-3.5 text-[#0A3977] shrink-0 mt-0.5" />
+                    <span>
+                      <strong className="text-[#0A3977]">Resultado Integrado Esperado:</strong>{' '}
+                      {diag.actionPlan.expectedOutcome}
+                    </span>
                   </div>
                 </div>
               </div>

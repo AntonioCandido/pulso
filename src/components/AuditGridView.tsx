@@ -188,6 +188,7 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
   // Calculation verification panel state (RF04 - Formula transparency)
   const [selectedCalcDiscipline, setSelectedCalcDiscipline] = useState<DisciplineMetric | null>(null);
   const [copiedFormula, setCopiedFormula] = useState<boolean>(false);
+  const [copiedTacticalPlan, setCopiedTacticalPlan] = useState<boolean>(false);
   const [calcViewMode, setCalcViewMode] = useState<'both' | 'lhi' | 'ars'>('both');
 
   // Risk distribution counts across the current base (filtered by course/search/semester so cards stay contextual)
@@ -1430,72 +1431,135 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
               })()}
 
               {(() => {
-                const detailDiag = getDetailedPedagogicalDiagnostic(viewingDetailItem);
+                const detailDiag = getDetailedPedagogicalDiagnostic(viewingDetailItem, weights);
                 return (
                   <div className="space-y-3 pt-1">
                     <div className="p-3.5 rounded-lg bg-amber-50/90 border border-amber-200 text-amber-950 space-y-1.5 shadow-2xs">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
                         <span className="font-bold text-xs text-amber-900 flex items-center gap-1.5">
                           <BookOpen className="w-3.5 h-3.5 text-amber-700" />
-                          <span>Solução para o Problema / Intervenção Pedagógica:</span>
+                          <span>Análise da Disciplina & Intervenção Pedagógica:</span>
                         </span>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${detailDiag.priority.badgeBg} ${detailDiag.priority.badgeText} ${detailDiag.priority.badgeBorder}`}>
                           {detailDiag.priority.label}
                         </span>
                       </div>
                       <p className="font-semibold text-xs leading-relaxed text-amber-950">
-                        {viewingDetailItem.recommendedAction}
+                        {getRecommendedPedagogicalAction(viewingDetailItem)}
                       </p>
                       <p className="text-[11px] text-amber-900/90 pt-1 leading-relaxed border-t border-amber-200/60">
                         {detailDiag.executiveSummary}
                       </p>
                     </div>
 
+                    {/* Análise Personalizada da Disciplina */}
+                    <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2 text-[11px]">
+                      <div className="flex flex-wrap items-center justify-between gap-1.5 pb-1.5 border-b border-slate-100">
+                        <span className="font-bold text-[#0A3977] uppercase tracking-wide text-[10px]">
+                          Análise Curricular — {detailDiag.disciplineAnalysis.thematicArea}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          {detailDiag.disciplineAnalysis.historicalNote}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="p-2 rounded bg-rose-50/60 border border-rose-200/70">
+                          <div className="font-bold text-rose-900 text-[10px] uppercase">
+                            Gargalo Prioritário: {detailDiag.disciplineAnalysis.primaryBottleneck.indicator}
+                          </div>
+                          <p className="text-slate-700 mt-0.5 leading-snug">
+                            {detailDiag.disciplineAnalysis.primaryBottleneck.detail}
+                          </p>
+                        </div>
+                        <div className="p-2 rounded bg-emerald-50/60 border border-emerald-200/70">
+                          <div className="font-bold text-emerald-900 text-[10px] uppercase">
+                            Ponto Forte: {detailDiag.disciplineAnalysis.protectiveStrength.indicator}
+                          </div>
+                          <p className="text-slate-700 mt-0.5 leading-snug">
+                            {detailDiag.disciplineAnalysis.protectiveStrength.detail}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-slate-600 leading-snug">
+                        <strong className="text-slate-800">Tópicos-Chave & Ferramental:</strong> {detailDiag.disciplineAnalysis.criticalTopics} · <em>{detailDiag.disciplineAnalysis.practicalTooling}</em>.
+                      </div>
+                    </div>
+
                     {/* 3 Action Pillars */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
-                      <div className="p-2.5 bg-white rounded border border-slate-200 space-y-1">
-                        <div className="font-bold text-slate-800 flex items-center gap-1">
-                          <GraduationCap className="w-3.5 h-3.5 text-[#0A3977]" />
-                          <span>Eixo Docente</span>
-                        </div>
-                        <ul className="space-y-1 text-slate-600">
-                          {detailDiag.actionPlan.faculty.map((act, i) => (
-                            <li key={i} className="flex items-start gap-1">
-                              <span className="text-[#0A3977] font-bold">•</span>
-                              <span>{act}</span>
-                            </li>
-                          ))}
-                        </ul>
+                    <div className="space-y-1.5">
+                      <div className="text-[10px] font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                        <ListChecks className="w-3.5 h-3.5 text-[#0A3977]" />
+                        <span>Plano de Ação Tático Operacional (3 Eixos Integrados)</span>
                       </div>
-
-                      <div className="p-2.5 bg-white rounded border border-slate-200 space-y-1">
-                        <div className="font-bold text-slate-800 flex items-center gap-1">
-                          <School className="w-3.5 h-3.5 text-[#0A3977]" />
-                          <span>Coordenação</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                        <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1.5">
+                          <div className="pb-1.5 border-b border-slate-100">
+                            <div className="font-bold text-slate-800 flex items-center gap-1">
+                              <GraduationCap className="w-3.5 h-3.5 text-[#0A3977] shrink-0" />
+                              <span>Eixo Docente</span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 mt-0.5 truncate" title={viewingDetailItem.professor}>
+                              {viewingDetailItem.professor}
+                            </div>
+                          </div>
+                          <div className="text-[10px] font-semibold text-[#0A3977] bg-blue-50/80 px-2 py-1 rounded border border-blue-100">
+                            Foco: {detailDiag.actionPlan.axisFocus.faculty}
+                          </div>
+                          <ul className="space-y-1 text-slate-600">
+                            {detailDiag.actionPlan.faculty.map((act, i) => (
+                              <li key={i} className="flex items-start gap-1">
+                                <span className="text-[#0A3977] font-bold">•</span>
+                                <span>{act}</span>
+                              </li>
+                            ))}
+                          </ul>
                         </div>
-                        <ul className="space-y-1 text-slate-600">
-                          {detailDiag.actionPlan.coordination.map((act, i) => (
-                            <li key={i} className="flex items-start gap-1">
-                              <span className="text-[#0A3977] font-bold">•</span>
-                              <span>{act}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
 
-                      <div className="p-2.5 bg-white rounded border border-slate-200 space-y-1">
-                        <div className="font-bold text-slate-800 flex items-center gap-1">
-                          <Users className="w-3.5 h-3.5 text-emerald-700" />
-                          <span>Alunos & Monitoria</span>
+                        <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1.5">
+                          <div className="pb-1.5 border-b border-slate-100">
+                            <div className="font-bold text-slate-800 flex items-center gap-1">
+                              <School className="w-3.5 h-3.5 text-[#0A3977] shrink-0" />
+                              <span>Coordenação de Curso</span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 mt-0.5 truncate" title={viewingDetailItem.course}>
+                              {viewingDetailItem.course}
+                            </div>
+                          </div>
+                          <div className="text-[10px] font-semibold text-[#0A3977] bg-blue-50/80 px-2 py-1 rounded border border-blue-100">
+                            Foco: {detailDiag.actionPlan.axisFocus.coordination}
+                          </div>
+                          <ul className="space-y-1 text-slate-600">
+                            {detailDiag.actionPlan.coordination.map((act, i) => (
+                              <li key={i} className="flex items-start gap-1">
+                                <span className="text-[#0A3977] font-bold">•</span>
+                                <span>{act}</span>
+                              </li>
+                            ))}
+                          </ul>
                         </div>
-                        <ul className="space-y-1 text-slate-600">
-                          {detailDiag.actionPlan.students.map((act, i) => (
-                            <li key={i} className="flex items-start gap-1">
-                              <span className="text-emerald-700 font-bold">•</span>
-                              <span>{act}</span>
-                            </li>
-                          ))}
-                        </ul>
+
+                        <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1.5">
+                          <div className="pb-1.5 border-b border-slate-100">
+                            <div className="font-bold text-slate-800 flex items-center gap-1">
+                              <Users className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                              <span>Discentes & Monitoria</span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 mt-0.5">
+                              {viewingDetailItem.totalStudents} discentes · Turma {viewingDetailItem.classCode}
+                            </div>
+                          </div>
+                          <div className="text-[10px] font-semibold text-emerald-800 bg-emerald-50/80 px-2 py-1 rounded border border-emerald-100">
+                            Foco: {detailDiag.actionPlan.axisFocus.students}
+                          </div>
+                          <ul className="space-y-1 text-slate-600">
+                            {detailDiag.actionPlan.students.map((act, i) => (
+                              <li key={i} className="flex items-start gap-1">
+                                <span className="text-emerald-700 font-bold">•</span>
+                                <span>{act}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1557,7 +1621,41 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
         const isArsConsistent = Math.abs(arsRawTotal - item.ars) < 0.25;
 
         // Comprehensive Pedagogical Diagnostic for this discipline
-        const diag = getDetailedPedagogicalDiagnostic(item);
+        const diag = getDetailedPedagogicalDiagnostic(item, weights);
+        const recommendedHeadline = getRecommendedPedagogicalAction(item);
+
+        const buildTacticalPlanText = () => [
+          `PLANO DE AÇÃO TÁTICO OPERACIONAL (3 EIXOS INTEGRADOS)`,
+          `Disciplina: ${item.name} (${item.code}) | Turma: ${item.classCode} (${item.semester}º sem. · ${item.shift})`,
+          `Docente: ${item.professor} | Curso: ${item.course} | Alunos: ${item.totalStudents}`,
+          `LHI: ${item.lhi.toFixed(1)} pts (${lhiStatus}) | ARS: ${item.ars.toFixed(1)} pts (${arsLevel}) | Prioridade: ${diag.priority.label} (${diag.priority.timeline})`,
+          ``,
+          `ANÁLISE PERSONALIZADA DA DISCIPLINA:`,
+          `• Área Temática: ${diag.disciplineAnalysis.thematicArea}`,
+          `• Conteúdos Críticos: ${diag.disciplineAnalysis.criticalTopics}`,
+          `• Ferramental Recomendado: ${diag.disciplineAnalysis.practicalTooling}`,
+          `• Gargalo Prioritário: ${diag.disciplineAnalysis.primaryBottleneck.indicator} — ${diag.disciplineAnalysis.primaryBottleneck.detail}`,
+          `• Ponto Forte: ${diag.disciplineAnalysis.protectiveStrength.indicator} — ${diag.disciplineAnalysis.protectiveStrength.detail}`,
+          `• Perfil & Histórico: ${diag.disciplineAnalysis.classProfile} | ${diag.disciplineAnalysis.historicalNote}`,
+          ``,
+          `1. EIXO DOCENTE (${item.professor}) — Foco: ${diag.actionPlan.axisFocus.faculty}`,
+          ...diag.actionPlan.faculty.map((a, i) => `  ${i + 1}. ${a}`),
+          ``,
+          `2. COORDENAÇÃO DE CURSO (${item.course}) — Foco: ${diag.actionPlan.axisFocus.coordination}`,
+          ...diag.actionPlan.coordination.map((a, i) => `  ${i + 1}. ${a}`),
+          ``,
+          `3. DISCENTES & MONITORIA (${item.totalStudents} alunos) — Foco: ${diag.actionPlan.axisFocus.students}`,
+          ...diag.actionPlan.students.map((a, i) => `  ${i + 1}. ${a}`),
+          ``,
+          `Impacto Projetado: ${diag.actionPlan.expectedOutcome}`,
+          `Metas da Turma: Aprendizagem ${diag.targets.targetLearning} | Reprovação ${diag.targets.targetFailure} | Frequência ${diag.targets.targetAttendance} | LMS ${diag.targets.targetLms}`,
+        ].join('\n');
+
+        const handleCopyTacticalPlan = () => {
+          navigator.clipboard.writeText(buildTacticalPlanText());
+          setCopiedTacticalPlan(true);
+          setTimeout(() => setCopiedTacticalPlan(false), 2200);
+        };
 
         const handleCopyMemory = () => {
           const text = [
@@ -1587,8 +1685,7 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
             `ARS Final Apresentado: ${item.ars.toFixed(1)} pts (${arsLevel}) — ${isArsConsistent ? 'Auditado com Sucesso' : 'Aviso: Divergência'}`,
             ``,
             `3. DIAGNÓSTICO PEDAGÓGICO E AÇÃO RECOMENDADA`,
-            `Prioridade: ${diag.priority.label} (${diag.priority.timeline})`,
-            `Diretriz Executiva: ${item.recommendedAction}`,
+            `Diretriz Executiva: ${recommendedHeadline}`,
             `Síntese Contextual: ${diag.executiveSummary}`,
             ``,
             `Diagnóstico por Indicador:`,
@@ -1597,15 +1694,7 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
             `• Assiduidade: ${diag.indicatorsDiagnosis.attendance.value} (${diag.indicatorsDiagnosis.attendance.status}) - ${diag.indicatorsDiagnosis.attendance.text}`,
             `• Engajamento LMS: ${diag.indicatorsDiagnosis.engagement.value} (${diag.indicatorsDiagnosis.engagement.status}) - ${diag.indicatorsDiagnosis.engagement.text}`,
             ``,
-            `Plano Tático Operacional:`,
-            `[Eixo Docente - ${item.professor}]`,
-            ...diag.actionPlan.faculty.map((a, i) => `  ${i + 1}. ${a}`),
-            `[Eixo Coordenação - ${item.course}]`,
-            ...diag.actionPlan.coordination.map((a, i) => `  ${i + 1}. ${a}`),
-            `[Eixo Discentes & Monitoria - ${item.totalStudents} alunos]`,
-            ...diag.actionPlan.students.map((a, i) => `  ${i + 1}. ${a}`),
-            ``,
-            `Metas da Turma: Aprendizagem ${diag.targets.targetLearning} | Reprovação ${diag.targets.targetFailure} | Frequência ${diag.targets.targetAttendance} | LMS ${diag.targets.targetLms}`,
+            buildTacticalPlanText(),
             `=================================================================`
           ].join('\n');
 
@@ -2248,11 +2337,71 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                       </span>
                     </div>
                     <p className="font-semibold text-xs leading-relaxed text-amber-950">
-                      {item.recommendedAction}
+                      {recommendedHeadline}
                     </p>
                     <p className="text-[11px] text-amber-900/90 pt-1.5 leading-relaxed border-t border-amber-200/60">
                       {diag.executiveSummary}
                     </p>
+                  </div>
+
+                  {/* 2B. Análise Personalizada da Disciplina */}
+                  <div className="bg-white border border-slate-200 rounded-lg p-3.5 space-y-2.5 shadow-2xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                      <div className="text-[11px] font-bold text-[#0A3977] uppercase tracking-wide flex items-center gap-1.5">
+                        <BookOpen className="w-3.5 h-3.5 text-[#0A3977]" />
+                        <span>Análise Personalizada da Disciplina · {diag.disciplineAnalysis.thematicArea}</span>
+                      </div>
+                      <span className="text-[10px] font-medium text-slate-500">
+                        {diag.disciplineAnalysis.historicalNote}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-[11px]">
+                      <div className={`p-2.5 rounded-lg border ${
+                        diag.disciplineAnalysis.primaryBottleneck.severity === 'Crítico'
+                          ? 'bg-rose-50/70 border-rose-200'
+                          : diag.disciplineAnalysis.primaryBottleneck.severity === 'Alerta'
+                          ? 'bg-amber-50/70 border-amber-200'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}>
+                        <div className="font-bold text-slate-900 flex items-center justify-between gap-2">
+                          <span>Gargalo Prioritário: {diag.disciplineAnalysis.primaryBottleneck.indicator}</span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            diag.disciplineAnalysis.primaryBottleneck.severity === 'Crítico'
+                              ? 'bg-rose-100 text-rose-800'
+                              : diag.disciplineAnalysis.primaryBottleneck.severity === 'Alerta'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {diag.disciplineAnalysis.primaryBottleneck.severity}
+                          </span>
+                        </div>
+                        <p className="text-slate-700 mt-1 leading-relaxed">
+                          {diag.disciplineAnalysis.primaryBottleneck.detail}
+                        </p>
+                      </div>
+
+                      <div className="p-2.5 rounded-lg bg-emerald-50/60 border border-emerald-200">
+                        <div className="font-bold text-emerald-950 flex items-center gap-1.5">
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>Alavanca / Ponto Forte: {diag.disciplineAnalysis.protectiveStrength.indicator}</span>
+                        </div>
+                        <p className="text-emerald-900/90 mt-1 leading-relaxed">
+                          {diag.disciplineAnalysis.protectiveStrength.detail}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] bg-slate-50/80 p-2.5 rounded-lg border border-slate-100 text-slate-700">
+                      <div>
+                        <strong className="text-slate-900">Conteúdos Críticos da Ementa:</strong>{' '}
+                        {diag.disciplineAnalysis.criticalTopics}.
+                      </div>
+                      <div>
+                        <strong className="text-slate-900">Perfil da Turma & Ferramental:</strong>{' '}
+                        {diag.disciplineAnalysis.classProfile}. Ferramentas: <em>{diag.disciplineAnalysis.practicalTooling}</em>.
+                      </div>
+                    </div>
                   </div>
 
                   {/* 3. Diagnóstico Analítico Multidimensional dos 4 Indicadores */}
@@ -2344,21 +2493,52 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                     </div>
                   </div>
 
-                  {/* 4. Plano Tático Operacional em 3 Eixos */}
-                  <div className="space-y-1.5">
-                    <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
-                      <ListChecks className="w-3.5 h-3.5 text-[#0A3977]" />
-                      <span>Plano de Ação Tático Operacional (3 Eixos Integrados):</span>
+                  {/* 4. Plano Tático Operacional em 3 Eixos Integrados */}
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                        <ListChecks className="w-3.5 h-3.5 text-[#0A3977]" />
+                        <span>Plano de Ação Tático Operacional (3 Eixos Integrados) · {item.code}</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleCopyTacticalPlan}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-[#0A3977] font-semibold rounded-md transition-colors cursor-pointer text-[11px] shadow-2xs"
+                        title="Copiar análise e plano tático completo desta disciplina"
+                      >
+                        {copiedTacticalPlan ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-600" />
+                            <span className="text-emerald-700">Plano Copiado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copiar Plano Tático</span>
+                          </>
+                        )}
+                      </button>
                     </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
                       {/* Eixo Docente */}
-                      <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2 shadow-2xs">
-                        <div className="flex items-center gap-1.5 pb-1.5 border-b border-slate-100">
-                          <GraduationCap className="w-4 h-4 text-[#0A3977]" />
-                          <span className="font-bold text-xs text-slate-900">Eixo Docente</span>
-                          <span className="text-[10px] text-slate-400">({item.professor})</span>
+                      <div className="p-3 bg-white rounded-lg border border-slate-200 flex flex-col gap-2 shadow-2xs">
+                        <div className="pb-1.5 border-b border-slate-100">
+                          <div className="flex items-center gap-1.5">
+                            <GraduationCap className="w-4 h-4 text-[#0A3977] shrink-0" />
+                            <span className="font-bold text-xs text-slate-900">Eixo Docente</span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5 truncate" title={item.professor}>
+                            {item.professor}
+                          </div>
                         </div>
-                        <ul className="space-y-1.5 text-[11px] text-slate-700">
+
+                        <div className="px-2 py-1 rounded bg-blue-50/80 border border-blue-100 text-[10px] font-semibold text-[#0A3977] leading-snug">
+                          Foco: {diag.actionPlan.axisFocus.faculty}
+                        </div>
+
+                        <ul className="space-y-1.5 text-[11px] text-slate-700 flex-1">
                           {diag.actionPlan.faculty.map((act, i) => (
                             <li key={i} className="flex items-start gap-1.5 leading-relaxed">
                               <span className="text-[#0A3977] font-bold shrink-0 mt-0.5">•</span>
@@ -2369,13 +2549,22 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                       </div>
 
                       {/* Eixo Coordenação */}
-                      <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2 shadow-2xs">
-                        <div className="flex items-center gap-1.5 pb-1.5 border-b border-slate-100">
-                          <School className="w-4 h-4 text-[#0A3977]" />
-                          <span className="font-bold text-xs text-slate-900">Coordenação de Curso</span>
-                          <span className="text-[10px] text-slate-400">({item.course})</span>
+                      <div className="p-3 bg-white rounded-lg border border-slate-200 flex flex-col gap-2 shadow-2xs">
+                        <div className="pb-1.5 border-b border-slate-100">
+                          <div className="flex items-center gap-1.5">
+                            <School className="w-4 h-4 text-[#0A3977] shrink-0" />
+                            <span className="font-bold text-xs text-slate-900">Coordenação de Curso</span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5 truncate" title={`${item.course} · ${item.classCode}`}>
+                            {item.course} · Turma {item.classCode}
+                          </div>
                         </div>
-                        <ul className="space-y-1.5 text-[11px] text-slate-700">
+
+                        <div className="px-2 py-1 rounded bg-blue-50/80 border border-blue-100 text-[10px] font-semibold text-[#0A3977] leading-snug">
+                          Foco: {diag.actionPlan.axisFocus.coordination}
+                        </div>
+
+                        <ul className="space-y-1.5 text-[11px] text-slate-700 flex-1">
                           {diag.actionPlan.coordination.map((act, i) => (
                             <li key={i} className="flex items-start gap-1.5 leading-relaxed">
                               <span className="text-[#0A3977] font-bold shrink-0 mt-0.5">•</span>
@@ -2386,13 +2575,22 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                       </div>
 
                       {/* Eixo Discente & Monitoria */}
-                      <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2 shadow-2xs">
-                        <div className="flex items-center gap-1.5 pb-1.5 border-b border-slate-100">
-                          <Users className="w-4 h-4 text-emerald-700" />
-                          <span className="font-bold text-xs text-slate-900">Discentes & Monitoria</span>
-                          <span className="text-[10px] text-slate-400">({item.totalStudents} alunos)</span>
+                      <div className="p-3 bg-white rounded-lg border border-slate-200 flex flex-col gap-2 shadow-2xs">
+                        <div className="pb-1.5 border-b border-slate-100">
+                          <div className="flex items-center gap-1.5">
+                            <Users className="w-4 h-4 text-emerald-700 shrink-0" />
+                            <span className="font-bold text-xs text-slate-900">Discentes & Monitoria</span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            {item.totalStudents} {item.totalStudents === 1 ? 'aluno' : 'alunos'} · {item.semester}º sem. ({item.shift})
+                          </div>
                         </div>
-                        <ul className="space-y-1.5 text-[11px] text-slate-700">
+
+                        <div className="px-2 py-1 rounded bg-emerald-50/80 border border-emerald-100 text-[10px] font-semibold text-emerald-800 leading-snug">
+                          Foco: {diag.actionPlan.axisFocus.students}
+                        </div>
+
+                        <ul className="space-y-1.5 text-[11px] text-slate-700 flex-1">
                           {diag.actionPlan.students.map((act, i) => (
                             <li key={i} className="flex items-start gap-1.5 leading-relaxed">
                               <span className="text-emerald-700 font-bold shrink-0 mt-0.5">•</span>
@@ -2400,6 +2598,15 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                             </li>
                           ))}
                         </ul>
+                      </div>
+                    </div>
+
+                    {/* Resultado Integrado Esperado */}
+                    <div className="p-2.5 bg-blue-50/70 border border-blue-200/80 rounded-lg text-[11px] text-[#0A3977] flex items-start gap-2">
+                      <Sparkles className="w-3.5 h-3.5 text-[#0A3977] shrink-0 mt-0.5" />
+                      <div>
+                        <strong>Resultado Integrado Esperado:</strong>{' '}
+                        <span className="text-slate-700">{diag.actionPlan.expectedOutcome}</span>
                       </div>
                     </div>
                   </div>
