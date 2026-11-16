@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { DisciplineMetric, SystemConfig, ImportSession } from '../types';
 import { ExecutiveDashboardCanvas } from './ExecutiveDashboardCanvas';
+import { resolveSourceCreatedAtFallback } from '../utils/pdfParser';
 import { 
   exportExecutiveDashboardToPdf, 
   printExecutiveDashboardReport, 
@@ -261,10 +262,12 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
       copies: printCopies,
     };
 
+    const sourceCreatedAt = resolveSourceCreatedAtFallback(activeSession, primaryDiscipline);
+
     try {
       await printExecutiveDashboardReport(
         'print-executive-report',
-        `Relatório Executivo — ${campusLabel} (${config.academicPeriod})`,
+        `Relatório Executivo — ${campusLabel} (${config.academicPeriod})${sourceCreatedAt ? ` · Arquivo criado em ${sourceCreatedAt}` : ''}`,
         printOptions
       );
       setStatusBanner({
@@ -348,8 +351,15 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
               <span>Disciplinas: <strong className="text-slate-800">{disciplines.length} turmas</strong></span>
             </span>
             {activeSession?.fileName && (
-              <span className="flex items-center gap-1 bg-slate-100 px-2.5 py-0.5 rounded truncate max-w-xs" title={activeSession.fileName}>
-                <span>Origem: <strong className="text-slate-800">{activeSession.fileName}</strong></span>
+              <span className="flex items-center gap-1 bg-slate-100 px-2.5 py-0.5 rounded max-w-md truncate" title={activeSession.fileName}>
+                <span>
+                  Origem: <strong className="text-slate-800">{activeSession.fileName}</strong>
+                  {resolveSourceCreatedAtFallback(activeSession, disciplines[0]) && (
+                    <span className="tabular-nums text-slate-600">
+                      {' '}· Criado em: <strong className="text-slate-800">{resolveSourceCreatedAtFallback(activeSession, disciplines[0])}</strong>
+                    </span>
+                  )}
+                </span>
               </span>
             )}
           </div>

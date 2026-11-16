@@ -25,6 +25,7 @@ import {
   getDetailedPedagogicalDiagnostic,
   getRecommendedPedagogicalAction,
 } from '../utils/calculations';
+import { resolveSourceCreatedAtFallback } from '../utils/pdfParser';
 
 export interface ExecutiveDashboardCanvasProps {
   disciplines: DisciplineMetric[];
@@ -73,9 +74,13 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
     ? 'CURSO: --'
     : `CURSO: ${(activeSession?.course || executive?.course || primaryDiscipline?.course || 'Não informado na fonte').toUpperCase()}`;
 
+  const fileCreatedAtDisplay = hasData
+    ? resolveSourceCreatedAtFallback(activeSession, primaryDiscipline)
+    : null;
+
   const lastUpdatedText = !hasData 
     ? 'Base de dados limpa' 
-    : `Fonte: ${activeSession?.fileName || primaryDiscipline?.sourceFileOrUrl || 'Não informado na fonte'}`;
+    : `Fonte: ${activeSession?.fileName || primaryDiscipline?.sourceFileOrUrl || 'Não informado na fonte'}${fileCreatedAtDisplay ? ` · Criado em ${fileCreatedAtDisplay}` : ''}`;
 
   // 1. Tempo de Estudo
   const studyTimeDisplay = !hasData 
@@ -1352,6 +1357,9 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
               <div className="bg-slate-50 px-6 py-3.5 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="text-[11px] text-slate-500">
                   Fonte dos dados: <strong>{activeSession?.fileName || selectedRiskItem.sourceFileOrUrl || 'Não informado na fonte'}</strong>
+                  {fileCreatedAtDisplay && (
+                    <span className="tabular-nums"> · Criado em: <strong>{fileCreatedAtDisplay}</strong></span>
+                  )}
                 </div>
                 <button
                   type="button"

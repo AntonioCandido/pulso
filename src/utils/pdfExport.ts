@@ -1,6 +1,7 @@
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { DisciplineMetric, ImportSession, SystemConfig } from '../types';
+import { resolveSourceCreatedAtFallback } from './pdfParser';
 
 /**
  * Fases do ciclo de vida da exportação em PDF para feedback reativo na UI.
@@ -347,9 +348,13 @@ async function renderFallbackExecutiveCanvas(
       : `Período ${config?.academicPeriod || '2026.2'}`
     : 'Período --';
 
+  const sourceFileName = activeSession?.fileName || primary?.sourceFileOrUrl || 'Arquivo Importado';
+  const sourceCreatedAt = resolveSourceCreatedAtFallback(activeSession, primary);
   const fileText = !hasData
     ? 'Base de dados limpa'
-    : `Relatório: ${activeSession?.fileName || primary?.sourceFileOrUrl || 'Arquivo Importado'}`;
+    : sourceCreatedAt
+    ? `Relatório: ${sourceFileName} · Criado em: ${sourceCreatedAt}`
+    : `Relatório: ${sourceFileName}`;
 
   ctx.fillStyle = '#FFB800';
   ctx.font = '900 34px sans-serif';
@@ -789,11 +794,19 @@ export async function exportExecutiveDashboardToPdf(
   pdf.addImage(imgData, 'PNG', xOffset, yOffset, finalWidth, finalHeight, undefined, 'FAST');
 
   // Metadados do PDF para governança
+  const fbCtx = options.fallbackContext;
+  const pdfSourceName = fbCtx?.activeSession?.fileName || fbCtx?.disciplines?.[0]?.sourceFileOrUrl;
+  const pdfSourceCreatedAt = resolveSourceCreatedAtFallback(fbCtx?.activeSession, fbCtx?.disciplines?.[0]);
+
   pdf.setProperties({
-    title: 'Relatório Executivo — Pulso Acadêmico',
-    subject: 'Dashboard Executivo de Governança Acadêmica',
+    title: pdfSourceName
+      ? `Relatório Executivo — Pulso Acadêmico (${pdfSourceName})`
+      : 'Relatório Executivo — Pulso Acadêmico',
+    subject: pdfSourceName
+      ? `Dashboard Executivo de Governança Acadêmica · Fonte: ${pdfSourceName}${pdfSourceCreatedAt ? ` (Criado em ${pdfSourceCreatedAt})` : ''}`
+      : 'Dashboard Executivo de Governança Acadêmica',
     author: 'Sistema Pulso Acadêmico YDUQS',
-    keywords: 'Pulso Acadêmico, Governança, LHI, ARS, Indicadores',
+    keywords: `Pulso Acadêmico, Governança, LHI, ARS, Indicadores${pdfSourceCreatedAt ? `, Criado em ${pdfSourceCreatedAt}` : ''}`,
     creator: 'Pulso Acadêmico Engine v2.0',
   });
 

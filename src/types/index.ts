@@ -65,6 +65,8 @@ export interface ImportSession {
   version: number;
   fileName: string;
   fileSize?: string;
+  fileCreatedAt?: string;
+  fileCreatedAtSource?: string;
   importedAt: string;
   sourceType: 'PDF' | 'POWER_BI';
   totalRecords: number;

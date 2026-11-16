@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { DisciplineMetric, FormulaWeights, SystemConfig, PowerBIConnectionConfig, AcademicCourse, ImportSession } from '../types';
-import { extractMetricsFromPDF, ExtractionProgress } from '../utils/pdfParser';
+import { extractMetricsFromPDF, ExtractionProgress, extractFileCreationInfo, formatBrDateTime, resolveKnownReportCreatedAt } from '../utils/pdfParser';
 import { USER_POWERBI_URL, getPowerBiSynchronizedData } from '../data/mockAcademicData';
 import { calculateLHI, calculateARS, getLHIStatus, getARSLevel, getRecommendedPedagogicalAction } from '../utils/calculations';
 
@@ -49,6 +49,7 @@ export interface PDFDocumentItem {
   recordCount: number;
   fileSize: string;
   uploadedDate: string;
+  createdAt?: string;
 }
 
 interface PendingImportData {
@@ -63,6 +64,7 @@ export const AVAILABLE_SAMPLE_REPORTS: PDFDocumentItem[] = [
     recordCount: 15,
     fileSize: '148 KB',
     uploadedDate: '2026-10-29',
+    createdAt: '29/10/2026 06:20',
   },
   {
     fileName: 'Pulso Acadêmico IMPAR R9.pdf',
@@ -70,6 +72,7 @@ export const AVAILABLE_SAMPLE_REPORTS: PDFDocumentItem[] = [
     recordCount: 15,
     fileSize: '245 KB',
     uploadedDate: '2026-10-29',
+    createdAt: '29/10/2026 07:20',
   },
   {
     fileName: 'Pulso Acadêmico - Taquara (Final).pdf',
@@ -77,6 +80,7 @@ export const AVAILABLE_SAMPLE_REPORTS: PDFDocumentItem[] = [
     recordCount: 15,
     fileSize: '184 KB',
     uploadedDate: '2026-10-20',
+    createdAt: '20/10/2026 16:38',
   },
   {
     fileName: 'Pulso Acadêmico TOM JOBIM.pdf',
@@ -84,6 +88,7 @@ export const AVAILABLE_SAMPLE_REPORTS: PDFDocumentItem[] = [
     recordCount: 15,
     fileSize: '312 KB',
     uploadedDate: '2026-10-15',
+    createdAt: '15/10/2026 09:00',
   },
 ];
 
@@ -252,12 +257,15 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
     // Extract real academic indicators mapped from the configured Power BI report
     const syncedPowerBiData = getPowerBiSynchronizedData(config.weights);
     const exec = syncedPowerBiData[0]?.executiveSummary;
+    const nowFormatted = formatBrDateTime(new Date());
     const sessionMeta: ImportSession = {
       importId: `pbi_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       version: Date.now(),
       fileName: 'Power BI - Pulso Acadêmico (YDUQS/Estácio)',
       fileSize: 'Conector Homologado',
-      importedAt: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      fileCreatedAt: nowFormatted,
+      fileCreatedAtSource: 'Sincronização Power BI',
+      importedAt: nowFormatted,
       sourceType: 'POWER_BI',
       totalRecords: syncedPowerBiData.length,
       totalStudents: syncedPowerBiData.reduce((acc, curr) => acc + curr.totalStudents, 0),
@@ -490,15 +498,25 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
         const firstCampus = newItems[0]?.campus || 'Não informado na fonte';
         const firstCourse = newItems[0]?.course || 'Não informado na fonte';
 
+        const sheetCreatedRaw = workbook.Props?.CreatedDate ? new Date(workbook.Props.CreatedDate) : null;
+        const hasSheetCreated = sheetCreatedRaw instanceof Date && !Number.isNaN(sheetCreatedRaw.getTime());
+        const fileCreatedAt = hasSheetCreated
+          ? formatBrDateTime(sheetCreatedRaw)
+          : file.lastModified
+          ? formatBrDateTime(new Date(file.lastModified))
+          : formatBrDateTime(new Date());
+        const fileCreatedAtSource = hasSheetCreated
+          ? 'Metadado interno da planilha (CreatedDate)'
+          : 'Data/hora do arquivo no dispositivo';
+
         const sessionMeta: ImportSession = {
           importId: `pbi_export_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           version: Date.now(),
           fileName: file.name,
           fileSize: `${Math.max(1, Math.round(file.size / 1024))} KB`,
-          importedAt:
-            new Date().toLocaleDateString('pt-BR') +
-            ' ' +
-            new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          fileCreatedAt,
+          fileCreatedAtSource,
+          importedAt: formatBrDateTime(new Date()),
           sourceType: 'POWER_BI',
           totalRecords: newItems.length,
           totalStudents: newItems.reduce((acc, curr) => acc + curr.totalStudents, 0),
@@ -526,19 +544,24 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
   // ATOMIC VALIDATION & STAGING ROUTINE (Step 1 of Import Lifecycle)
   // Extracts and validates without mutating active application state.
   // =========================================================================
-  const handleStageAndValidatePDF = async (fileObj: { name: string; size?: number } | File) => {
+  const handleStageAndValidatePDF = async (
+    fileObj: { name: string; size?: number; createdAt?: string; lastModified?: number } | File
+  ) => {
     setIsExtracting(true);
     setExtractionError(null);
     setExtractionProgress(null);
     setLastExtractedCount(null);
 
     try {
-      const extracted = await extractMetricsFromPDF(
-        fileObj,
-        config.weights,
-        (p) => setExtractionProgress(p),
-        simulateException
-      );
+      const [extracted, creationInfo] = await Promise.all([
+        extractMetricsFromPDF(
+          fileObj,
+          config.weights,
+          (p) => setExtractionProgress(p),
+          simulateException
+        ),
+        extractFileCreationInfo(fileObj),
+      ]);
 
       if (!extracted || extracted.length === 0) {
         throw new Error(`Nenhum registro de turma válido pôde ser extraído do documento "${fileObj.name}".`);
@@ -552,7 +575,9 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
         version: Date.now(),
         fileName: fileObj.name,
         fileSize: fileObj.size ? `${(fileObj.size / 1024).toFixed(0)} KB` : '148 KB',
-        importedAt: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        fileCreatedAt: creationInfo.fileCreatedAt,
+        fileCreatedAtSource: creationInfo.source,
+        importedAt: formatBrDateTime(new Date()),
         sourceType: 'PDF',
         totalRecords: extracted.length,
         totalStudents,
@@ -609,6 +634,7 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
         recordCount: pendingImport.sessionMeta.totalRecords,
         fileSize: pendingImport.sessionMeta.fileSize || '245 KB',
         uploadedDate: new Date().toISOString().slice(0, 10),
+        createdAt: pendingImport.sessionMeta.fileCreatedAt,
       }
     ]);
 
@@ -1256,10 +1282,18 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
                           {doc.description}
                         </p>
 
-                        <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-500 tabular-nums">
                           <span>{doc.fileSize}</span>
                           <span aria-hidden="true">·</span>
                           <span>{doc.recordCount} turmas</span>
+                          {(doc.createdAt || activeSession?.fileCreatedAt || resolveKnownReportCreatedAt(doc.fileName)) && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span>
+                                Criado em: <strong>{doc.createdAt || activeSession?.fileCreatedAt || resolveKnownReportCreatedAt(doc.fileName)}</strong>
+                              </span>
+                            </>
+                          )}
                           {isActive && (
                             <>
                               <span aria-hidden="true">·</span>
@@ -1271,7 +1305,7 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
 
                       <div className="mt-4 flex items-center gap-2">
                         <button
-                          onClick={() => handleStageAndValidatePDF({ name: doc.fileName })}
+                          onClick={() => handleStageAndValidatePDF({ name: doc.fileName, createdAt: doc.createdAt })}
                           disabled={isExtracting}
                           className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
                             isActive
@@ -1376,15 +1410,20 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
                             </button>
                           </div>
                         </div>
-                        <p className="text-[11px] text-slate-600 leading-snug mb-3">
+                        <p className="text-[11px] text-slate-600 leading-snug mb-1.5">
                           {sample.description}
                         </p>
+                        {(sample.createdAt || resolveKnownReportCreatedAt(sample.fileName)) && (
+                          <div className="text-[10px] text-slate-500 mb-3 tabular-nums">
+                            {sample.fileSize} · Criado em: <strong className="text-slate-700">{sample.createdAt || resolveKnownReportCreatedAt(sample.fileName)}</strong>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => handleStageAndValidatePDF({ name: sample.fileName })}
+                          onClick={() => handleStageAndValidatePDF({ name: sample.fileName, createdAt: sample.createdAt })}
                           disabled={isExtracting}
                           className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
                             isCurrentlyActive
@@ -1573,6 +1612,18 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                <div>
+                  <span className="text-slate-500 block">Data de Criação & Hora do Arquivo:</span>
+                  <span className="font-semibold text-slate-800 tabular-nums">
+                    {pendingImport.sessionMeta.fileCreatedAt || pendingImport.sessionMeta.importedAt}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Origem da Data:</span>
+                  <span className="font-medium text-slate-700">
+                    {pendingImport.sessionMeta.fileCreatedAtSource || 'Metadado do arquivo'}
+                  </span>
+                </div>
                 <div>
                   <span className="text-slate-500 block">Campus Identificado:</span>
                   <span className="font-semibold text-slate-800">{pendingImport.sessionMeta.campus}</span>

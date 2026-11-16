@@ -9,6 +9,7 @@ import { TestSuiteView } from './components/TestSuiteView';
 import { DisciplineMetric, SystemConfig, AcademicCourse, FormulaWeights, ImportSession } from './types';
 import { INITIAL_SYSTEM_CONFIG, getPulsoImparDisciplines } from './data/mockAcademicData';
 import { exportAnalyticalWorkbook, exportPowerPointDeck } from './utils/calculations';
+import { resolveKnownReportCreatedAt } from './utils/pdfParser';
 
 const normalizeProfessorName = (name?: string) =>
   name ? name.replace(/Prof\.\s*Dr\.\s*Antônio\s*Cândido/gi, 'Prof. Antônio Cândido') : name;
@@ -30,9 +31,13 @@ export default function App() {
             campus: 'TOM JOBIM',
             studyTimeFormatted: '18:56',
             attendanceRate: 85.78,
+            fileCreatedAt: parsed.fileCreatedAt || resolveKnownReportCreatedAt(parsed.fileName) || parsed.importedAt,
           };
         }
-        return parsed;
+        return {
+          ...parsed,
+          fileCreatedAt: parsed.fileCreatedAt || resolveKnownReportCreatedAt(parsed.fileName) || parsed.importedAt,
+        };
       }
     } catch (e) {}
     return null;
@@ -165,6 +170,7 @@ export default function App() {
           recordCount: sessionMeta.totalRecords,
           fileSize: sessionMeta.fileSize || '245 KB',
           uploadedDate: new Date().toISOString().slice(0, 10),
+          createdAt: sessionMeta.fileCreatedAt,
         }
       ]));
       // Clean legacy caches to prevent cross-file contamination
@@ -228,11 +234,11 @@ export default function App() {
   };
 
   const handleQuickExportExcel = () => {
-    exportAnalyticalWorkbook(disciplines, config);
+    exportAnalyticalWorkbook(disciplines, config, activeSession);
   };
 
   const handleQuickExportPPTX = async () => {
-    await exportPowerPointDeck(disciplines, config);
+    await exportPowerPointDeck(disciplines, config, activeSession);
   };
 
   return (

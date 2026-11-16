@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { DisciplineMetric, SystemConfig, AcademicCourse, ImportSession } from '../types';
 import { ExecutiveDashboardCanvas } from './ExecutiveDashboardCanvas';
+import { AcademicRiskNotifications } from './AcademicRiskNotifications';
+import { resolveSourceCreatedAtFallback } from '../utils/pdfParser';
 
 interface DashboardViewProps {
   disciplines: DisciplineMetric[];
@@ -65,6 +67,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const courseLabel = !hasData
     ? 'CURSO: --'
     : `CURSO: ${(activeSession?.course || executive?.course || primaryDiscipline?.course || 'Não informado na fonte').toUpperCase()}`;
+
+  const fileCreatedAtDisplay = hasData
+    ? resolveSourceCreatedAtFallback(activeSession, primaryDiscipline)
+    : null;
 
   const lastUpdatedText = !hasData 
     ? 'Base de dados limpa' 
@@ -258,11 +264,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-slate-100 rounded-md border border-slate-200">
+          <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-0.5 bg-slate-100 rounded-md border border-slate-200">
             <span className="text-[10px] text-slate-500 font-semibold">Fonte Ativa:</span>
             <span className="text-[11px] font-bold text-slate-800">
               {hasData ? (activeSession?.fileName || primaryDiscipline?.sourceFileOrUrl || 'Arquivo Importado') : 'Nenhuma Fonte (Base Limpa)'}
             </span>
+            {hasData && fileCreatedAtDisplay && (
+              <>
+                <span aria-hidden="true" className="text-slate-300">·</span>
+                <span className="text-[10px] text-slate-500 font-medium tabular-nums">
+                  Criado em: <strong className="text-slate-700">{fileCreatedAtDisplay}</strong>
+                </span>
+              </>
+            )}
           </div>
 
           <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
@@ -282,6 +296,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           onNavigateToSources={onNavigateToSources}
         />
       </div>
+
+      {/* Sistema de Notificações de Risco Acadêmico (Top 3 LHI mais crítico) */}
+      <AcademicRiskNotifications
+        disciplines={disciplines}
+        activeSession={activeSession}
+        config={config}
+        onNavigateToAudit={onNavigateToAudit}
+        onNavigateToSources={onNavigateToSources}
+      />
 
       {/* Context Pedagogical Notes */}
       <div className="no-print grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
