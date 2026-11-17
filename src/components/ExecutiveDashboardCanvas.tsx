@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Clock,
   Calendar,
@@ -44,6 +44,12 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
 }) => {
   const [selectedRiskItem, setSelectedRiskItem] = useState<DisciplineMetric | null>(null);
   const [copiedExecPlan, setCopiedExecPlan] = useState(false);
+
+  useEffect(() => {
+    setSelectedRiskItem(null);
+    setCopiedExecPlan(false);
+  }, [activeSession?.importId, disciplines.length]);
+
   const hasData = disciplines.length > 0;
   const primaryDiscipline = disciplines[0];
   const executive = primaryDiscipline?.executiveSummary;
@@ -529,7 +535,7 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
               </div>
               {hasData && (
                 <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium tabular-nums">
-                  Meta: 80,00%
+                  Meta: {(executive?.attendanceRateTarget ?? 80).toFixed(2).replace('.', ',')}%
                 </div>
               )}
             </div>
@@ -1039,38 +1045,38 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
 
         return (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs no-print"
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs no-print"
             onClick={() => setSelectedRiskItem(null)}
           >
             <div
-              className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-4xl w-full overflow-hidden animate-in fade-in zoom-in duration-150 text-xs"
+              className="bg-white rounded-t-2xl sm:rounded-xl shadow-2xl border border-slate-200 max-w-4xl w-full max-h-[92dvh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-xs"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Cabeçalho do Modal com a cor semântica do Nível de Risco */}
-              <div className="bg-[#0A3977] text-white px-4 sm:px-5 py-3 border-b-4 border-[#FFB800] flex items-start justify-between gap-3">
-                <div>
+              <div className="bg-[#0A3977] text-white px-4 sm:px-5 py-3 border-b-4 border-[#FFB800] flex items-start justify-between gap-3 shrink-0">
+                <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#38BDF8]">
-                    <Info className="w-3.5 h-3.5" />
-                    <span>Justificativa de Risco Acadêmico (ARS) & Plano de Solução</span>
+                    <Info className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">Justificativa de Risco Acadêmico (ARS) & Plano de Solução</span>
                   </div>
-                  <h3 className="text-sm sm:text-base font-extrabold text-white mt-0.5 leading-snug">
+                  <h3 className="text-sm sm:text-base font-extrabold text-white mt-0.5 leading-snug break-words">
                     {selectedRiskItem.name}
                   </h3>
-                  <p className="text-[11px] text-slate-200 font-mono">
+                  <p className="text-[11px] text-slate-200 font-mono break-words">
                     Código: {selectedRiskItem.code} · Alunos: {selectedRiskItem.totalStudents} · Tempo de Estudo: {selectedRiskItem.studyTimeFormatted || `${selectedRiskItem.studyHoursPerWeek}h`}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setSelectedRiskItem(null)}
-                  className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                  className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer shrink-0"
                   aria-label="Fechar modal"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="p-3.5 sm:p-4.5 space-y-3.5 max-h-[82vh] overflow-y-auto">
+              <div className="p-3.5 sm:p-5 space-y-3.5 overflow-y-auto flex-1 min-h-0">
                 {/* Banner de Classificação do Nível de Risco (Verde / Amarelo / Vermelho) */}
                 <div className={`p-3 sm:p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${modalRisk.cardBg}`}>
                   <div className="flex items-start gap-3">
@@ -1354,8 +1360,8 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
               </div>
 
               {/* Rodapé do Modal */}
-              <div className="bg-slate-50 px-6 py-3.5 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="text-[11px] text-slate-500">
+              <div className="bg-slate-50 px-4 sm:px-6 py-3 sm:py-3.5 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 shrink-0">
+                <div className="text-[11px] text-slate-500 min-w-0 break-words">
                   Fonte dos dados: <strong>{activeSession?.fileName || selectedRiskItem.sourceFileOrUrl || 'Não informado na fonte'}</strong>
                   {fileCreatedAtDisplay && (
                     <span className="tabular-nums"> · Criado em: <strong>{fileCreatedAtDisplay}</strong></span>
@@ -1364,7 +1370,7 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
                 <button
                   type="button"
                   onClick={() => setSelectedRiskItem(null)}
-                  className="px-4 py-2 bg-[#0A3977] hover:bg-blue-800 text-white font-bold rounded-lg transition-colors cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2 bg-[#0A3977] hover:bg-blue-800 text-white font-bold rounded-lg transition-colors cursor-pointer shrink-0 text-center"
                 >
                   Fechar Diagnóstico
                 </button>

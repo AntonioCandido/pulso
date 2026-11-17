@@ -7,9 +7,8 @@ import { FormulaEngineView } from './components/FormulaEngineView';
 import { ReportingView } from './components/ReportingView';
 import { TestSuiteView } from './components/TestSuiteView';
 import { DisciplineMetric, SystemConfig, AcademicCourse, FormulaWeights, ImportSession } from './types';
-import { INITIAL_SYSTEM_CONFIG, getPulsoImparDisciplines } from './data/mockAcademicData';
+import { INITIAL_SYSTEM_CONFIG } from './data/mockAcademicData';
 import { exportAnalyticalWorkbook, exportPowerPointDeck } from './utils/calculations';
-import { resolveKnownReportCreatedAt } from './utils/pdfParser';
 
 const normalizeProfessorName = (name?: string) =>
   name ? name.replace(/Prof\.\s*Dr\.\s*Antônio\s*Cândido/gi, 'Prof. Antônio Cândido') : name;
@@ -23,20 +22,9 @@ export default function App() {
       const saved = localStorage.getItem('pulso_active_session_v6');
       if (saved) {
         const parsed: ImportSession = JSON.parse(saved);
-        const lowerFile = (parsed.fileName || '').toLowerCase();
-        // Heal cached session if it was previously mapped to R9
-        if ((lowerFile.includes('tj') || lowerFile.includes('jobim') || lowerFile.includes('64ae4ea6')) && (parsed.campus.includes('R9') || parsed.studyTimeFormatted === '21:50')) {
-          return {
-            ...parsed,
-            campus: 'TOM JOBIM',
-            studyTimeFormatted: '18:56',
-            attendanceRate: 85.78,
-            fileCreatedAt: parsed.fileCreatedAt || resolveKnownReportCreatedAt(parsed.fileName) || parsed.importedAt,
-          };
-        }
         return {
           ...parsed,
-          fileCreatedAt: parsed.fileCreatedAt || resolveKnownReportCreatedAt(parsed.fileName) || parsed.importedAt,
+          fileCreatedAt: parsed.fileCreatedAt || parsed.importedAt,
         };
       }
     } catch (e) {}
@@ -47,25 +35,9 @@ export default function App() {
   const [disciplines, setDisciplines] = useState<DisciplineMetric[]>(() => {
     try {
       const saved = localStorage.getItem('pulso_disciplines_v6');
-      const savedSession = localStorage.getItem('pulso_active_session_v6');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          if (savedSession) {
-            const parsedSession: ImportSession = JSON.parse(savedSession);
-            const lowerFile = (parsedSession.fileName || '').toLowerCase();
-            if (
-              (lowerFile.includes('tj') || lowerFile.includes('jobim') || lowerFile.includes('64ae4ea6')) &&
-              parsed[0]?.code === 'DGT1398'
-            ) {
-              return getPulsoImparDisciplines().map(d => ({
-                ...d,
-                professor: normalizeProfessorName(d.professor) || d.professor,
-                importId: parsedSession.importId,
-                sourceFileOrUrl: parsedSession.fileName,
-              }));
-            }
-          }
           return parsed.map((d: DisciplineMetric) => ({
             ...d,
             professor: normalizeProfessorName(d.professor) || d.professor,
@@ -143,11 +115,13 @@ export default function App() {
   // Replaces the entire imported dataset with zero leftovers from previous files.
   // =========================================================================
   const handleReplaceImportData = (newItems: DisciplineMetric[], sessionMeta: ImportSession) => {
-    // 1. Tag all new items with the new unique importId and timestamp
-    const taggedItems = newItems.map((item) => ({
+    // 1. Tag all new items with a fresh unique ID, the new importId, sourceFileOrUrl, and timestamp
+    const taggedItems = newItems.map((item, idx) => ({
       ...item,
+      id: `${sessionMeta.importId}_${idx}_${item.code || 'disc'}`,
       professor: normalizeProfessorName(item.professor) || item.professor,
       importId: sessionMeta.importId,
+      sourceFileOrUrl: sessionMeta.fileName,
       lastUpdated: sessionMeta.importedAt,
     }));
 
@@ -163,16 +137,20 @@ export default function App() {
     try {
       localStorage.setItem('pulso_disciplines_v6', JSON.stringify(taggedItems));
       localStorage.setItem('pulso_active_session_v6', JSON.stringify(sessionMeta));
-      localStorage.setItem('pulso_user_pdf_docs_v6', JSON.stringify([
-        {
-          fileName: sessionMeta.fileName,
-          description: `Relatório Ativo · ${sessionMeta.campus} (${sessionMeta.studyTimeFormatted} estudo, ${sessionMeta.attendanceRate.toFixed(2).replace('.', ',')}% freq)`,
-          recordCount: sessionMeta.totalRecords,
-          fileSize: sessionMeta.fileSize || '245 KB',
-          uploadedDate: new Date().toISOString().slice(0, 10),
-          createdAt: sessionMeta.fileCreatedAt,
-        }
-      ]));
+      const nextPdfDocs =
+        sessionMeta.sourceType === 'PDF'
+          ? [
+              {
+                fileName: sessionMeta.fileName,
+                description: `Relatório Ativo · ${sessionMeta.campus} (${sessionMeta.studyTimeFormatted} estudo, ${sessionMeta.attendanceRate.toFixed(2).replace('.', ',')}% freq)`,
+                recordCount: sessionMeta.totalRecords,
+                fileSize: sessionMeta.fileSize || '—',
+                uploadedDate: new Date().toISOString().slice(0, 10),
+                createdAt: sessionMeta.fileCreatedAt,
+              },
+            ]
+          : [];
+      localStorage.setItem('pulso_user_pdf_docs_v6', JSON.stringify(nextPdfDocs));
       // Clean legacy caches to prevent cross-file contamination
       localStorage.removeItem('pulso_disciplines_v5');
       localStorage.removeItem('pulso_disciplines_v4');

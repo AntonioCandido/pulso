@@ -110,10 +110,11 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
   const [isSyncingBi, setIsSyncingBi] = useState(false);
   const [syncStep, setSyncStep] = useState<string | null>(null);
 
-  // File input ref for resetting DOM file picker
+  // File input ref for resetting DOM file picker & in-memory reference for re-validating local files
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadedFilesMapRef = useRef<Map<string, File>>(new Map());
 
-  // PDF Documents List state - includes imported reports or empty state when cleared
+  // PDF Documents List state - includes only the active imported report or empty state when cleared
   const [pdfDocuments, setPdfDocuments] = useState<PDFDocumentItem[]>(() => {
     try {
       const saved = localStorage.getItem('pulso_user_pdf_docs_v6');
@@ -130,6 +131,32 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
       localStorage.setItem('pulso_user_pdf_docs_v6', JSON.stringify(pdfDocuments));
     } catch (e) {}
   }, [pdfDocuments]);
+
+  // Keep pdfDocuments strictly synchronized with the active import session (zero stale cards)
+  useEffect(() => {
+    if (disciplines.length === 0 || !activeSession) {
+      setPdfDocuments([]);
+      setLastExtractedCount(null);
+      return;
+    }
+    if (activeSession.sourceType === 'POWER_BI') {
+      setPdfDocuments([]);
+      setLastExtractedCount(null);
+      return;
+    }
+    if (activeSession.sourceType === 'PDF') {
+      setPdfDocuments([
+        {
+          fileName: activeSession.fileName,
+          description: `Relatório Ativo · ${activeSession.campus} (${activeSession.studyTimeFormatted} estudo, ${activeSession.attendanceRate.toFixed(2).replace('.', ',')}% freq)`,
+          recordCount: activeSession.totalRecords,
+          fileSize: activeSession.fileSize || '—',
+          uploadedDate: new Date().toISOString().slice(0, 10),
+          createdAt: activeSession.fileCreatedAt,
+        },
+      ]);
+    }
+  }, [activeSession?.importId, disciplines.length]);
 
   // Sample / Template Reports List state - allows deleting models with persistence
   const [sampleReports, setSampleReports] = useState<PDFDocumentItem[]>(() => {
@@ -551,6 +578,13 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
     setExtractionError(null);
     setExtractionProgress(null);
     setLastExtractedCount(null);
+    setPendingImport(null);
+    setShowConfirmImportModal(false);
+
+    if (fileObj instanceof File) {
+      uploadedFilesMapRef.current.clear();
+      uploadedFilesMapRef.current.set(fileObj.name, fileObj);
+    }
 
     try {
       const [extracted, creationInfo] = await Promise.all([
@@ -574,14 +608,14 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
         importId: `import_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         version: Date.now(),
         fileName: fileObj.name,
-        fileSize: fileObj.size ? `${(fileObj.size / 1024).toFixed(0)} KB` : '148 KB',
+        fileSize: fileObj.size ? `${Math.max(1, Math.round(fileObj.size / 1024))} KB` : '148 KB',
         fileCreatedAt: creationInfo.fileCreatedAt,
         fileCreatedAtSource: creationInfo.source,
         importedAt: formatBrDateTime(new Date()),
         sourceType: 'PDF',
         totalRecords: extracted.length,
         totalStudents,
-        campus: exec?.campus || extracted[0]?.campus || 'Campus Principal',
+        campus: exec?.campus || extracted[0]?.campus || 'Unidade do Relatório',
         course: exec?.course || extracted[0]?.course || 'Ciência da Computação',
         studyTimeFormatted: exec?.studyTimeFormatted || (extracted[0]?.studyTimeFormatted ? extracted[0].studyTimeFormatted : '00:00'),
         attendanceRate: exec?.attendanceRate ?? (extracted.length > 0 ? Number((extracted.reduce((acc, c) => acc + c.attendanceRate, 0) / extracted.length).toFixed(2)) : 0),
@@ -595,11 +629,11 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
 
       // Open explicit confirmation modal
       setShowConfirmImportModal(true);
-      setLastExtractedCount(extracted.length);
     } catch (err: any) {
       // On failure: existing active dataset is 100% UNTOUCHED
       setExtractionError(err?.message || 'Erro ao processar relatório PDF.');
       setPendingImport(null);
+      setLastExtractedCount(null);
     } finally {
       setIsExtracting(false);
       // Reset input DOM element so selecting the same file repeatedly always triggers onChange
@@ -623,6 +657,8 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
   const handleConfirmPendingImport = () => {
     if (!pendingImport) return;
 
+    const confirmedCount = pendingImport.items.length;
+
     // Call single central routine to atomically replace dataset
     onReplaceImportData(pendingImport.items, pendingImport.sessionMeta);
 
@@ -632,12 +668,13 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
         fileName: pendingImport.sessionMeta.fileName,
         description: `Relatório Ativo · ${pendingImport.sessionMeta.campus} (${pendingImport.sessionMeta.studyTimeFormatted} estudo, ${pendingImport.sessionMeta.attendanceRate.toFixed(2).replace('.', ',')}% freq)`,
         recordCount: pendingImport.sessionMeta.totalRecords,
-        fileSize: pendingImport.sessionMeta.fileSize || '245 KB',
+        fileSize: pendingImport.sessionMeta.fileSize || '—',
         uploadedDate: new Date().toISOString().slice(0, 10),
         createdAt: pendingImport.sessionMeta.fileCreatedAt,
       }
     ]);
 
+    setLastExtractedCount(confirmedCount);
     setActionNotice(`Importação confirmada! O arquivo "${pendingImport.sessionMeta.fileName}" (${pendingImport.sessionMeta.campus}) substituiu integralmente a base anterior.`);
     setShowConfirmImportModal(false);
     setPendingImport(null);
@@ -651,6 +688,7 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
   const handleCancelPendingImport = () => {
     setPendingImport(null);
     setShowConfirmImportModal(false);
+    setLastExtractedCount(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -741,6 +779,7 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
     onClearAllImportedData();
 
     // 2. Wipe all local component states, staging, and messages
+    uploadedFilesMapRef.current.clear();
     setPdfDocuments([]);
     setIsExtracting(false);
     setExtractionProgress(null);
@@ -766,9 +805,9 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
-          <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 mb-1">
             <span>RF01 & RF02</span>
             <span aria-hidden="true">·</span>
             <span>Integração e Gestão de Fontes</span>
@@ -781,17 +820,17 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
               {disciplines.length > 0 ? `${disciplines.length} turmas na base` : 'Base zerada'}
             </span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
             Conexão de Dados & Gestão de Fontes
           </h1>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
           {/* Segmented Tab Controls */}
-          <div className="flex items-center gap-1 p-1 bg-slate-200/80 rounded-lg">
+          <div className="flex items-center gap-1 p-1 bg-slate-200/80 rounded-lg w-full sm:w-auto">
             <button
               onClick={() => setActiveTab('powerbi')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
                 activeTab === 'powerbi'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -801,7 +840,7 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('pdf')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
                 activeTab === 'pdf'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -814,7 +853,7 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
           {/* BOTÃO LIMPAR BASE DE DADOS */}
           <button
             onClick={() => setShowClearDatabaseModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-md transition-colors shadow-xs"
+            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-md transition-colors shadow-xs cursor-pointer"
             title="Zerar todas as informações e registros da base de dados"
           >
             <Trash2 className="w-3.5 h-3.5 text-rose-600" />
@@ -1120,10 +1159,10 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
       {activeTab === 'pdf' && (
         <div className="space-y-6">
           {/* File Drag and Drop & Preset Extractors */}
-          <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+          <div className="bg-white border border-slate-200 rounded-lg p-4 sm:p-5 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4">
               <div>
-                <h2 className="text-base font-bold text-slate-900">
+                <h2 className="text-sm sm:text-base font-bold text-slate-900">
                   Importação de Relatórios PDF & Atas Acadêmicas
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -1132,7 +1171,7 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
               </div>
 
               {/* RNF02 Exception testing toggle */}
-              <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer p-1.5 bg-slate-50 rounded border border-slate-200">
+              <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer p-1.5 bg-slate-50 rounded border border-slate-200 self-start sm:self-auto shrink-0">
                 <input
                   type="checkbox"
                   checked={simulateException}
@@ -1144,7 +1183,7 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
             </div>
 
             {/* Dropzone */}
-            <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:bg-slate-50/50 transition-colors relative">
+            <div className="border-2 border-dashed border-slate-300 rounded-lg p-5 sm:p-8 text-center hover:bg-slate-50/50 transition-colors relative">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1305,7 +1344,16 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
 
                       <div className="mt-4 flex items-center gap-2">
                         <button
-                          onClick={() => handleStageAndValidatePDF({ name: doc.fileName, createdAt: doc.createdAt })}
+                          onClick={() => {
+                            const cachedFile = uploadedFilesMapRef.current.get(doc.fileName);
+                            if (cachedFile) {
+                              handleStageAndValidatePDF(cachedFile);
+                            } else if (AVAILABLE_SAMPLE_REPORTS.some((s) => s.fileName === doc.fileName)) {
+                              handleStageAndValidatePDF({ name: doc.fileName, createdAt: doc.createdAt });
+                            } else {
+                              fileInputRef.current?.click();
+                            }
+                          }}
                           disabled={isExtracting}
                           className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
                             isActive
@@ -1371,7 +1419,7 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
                 {sampleReports.map((sample) => {
                   const isCurrentlyActive = disciplines.length > 0 && (
                     activeSession?.fileName === sample.fileName ||
@@ -1457,14 +1505,14 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
 
       {/* CONFIRMATION MODAL TO REMOVE SOURCE OR TEMPLATE */}
       {itemToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-md w-full p-6 animate-in fade-in zoom-in duration-150 text-xs">
-            <div className="flex items-start gap-3">
-              <div className="p-2.5 rounded-full bg-rose-100 text-rose-600 shrink-0">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl border border-slate-200 max-w-md w-full max-h-[92dvh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-xs">
+            <div className="p-4 sm:p-5 pb-3 border-b border-slate-100 shrink-0 flex items-start gap-3">
+              <div className="p-2 sm:p-2.5 rounded-full bg-rose-100 text-rose-600 shrink-0">
                 <Trash2 className="w-5 h-5" />
               </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
                   {itemToDelete.type === 'template' ? 'Excluir Modelo de Relatório' : 'Remover Fonte de Dados'}
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">
@@ -1475,54 +1523,56 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
               </div>
             </div>
 
-            <div className="mt-4 p-3 bg-slate-50 rounded-md border border-slate-200 font-medium text-slate-800 break-all">
-              <span className="text-slate-500 text-[11px] block">
-                {itemToDelete.type === 'template' ? 'Modelo a ser excluído:' : 'Fonte a ser removida:'}
-              </span>
-              <span className="font-semibold text-slate-900">{itemToDelete.displayName}</span>
-              <div className="text-[11px] text-slate-500 mt-1">
-                Tipo:{' '}
-                {itemToDelete.type === 'template'
-                  ? 'Modelo de Relatório Oficial'
-                  : itemToDelete.type === 'pdf'
-                  ? 'Relatório PDF Local'
-                  : 'Conector Power BI'}
+            <div className="p-4 sm:p-5 space-y-3 overflow-y-auto flex-1 min-h-0">
+              <div className="p-3 bg-slate-50 rounded-md border border-slate-200 font-medium text-slate-800 break-words">
+                <span className="text-slate-500 text-[11px] block">
+                  {itemToDelete.type === 'template' ? 'Modelo a ser excluído:' : 'Fonte a ser removida:'}
+                </span>
+                <span className="font-semibold text-slate-900">{itemToDelete.displayName}</span>
+                <div className="text-[11px] text-slate-500 mt-1">
+                  Tipo:{' '}
+                  {itemToDelete.type === 'template'
+                    ? 'Modelo de Relatório Oficial'
+                    : itemToDelete.type === 'pdf'
+                    ? 'Relatório PDF Local'
+                    : 'Conector Power BI'}
+                </div>
               </div>
+
+              {itemToDelete.associatedCount > 0 && (
+                <div className="p-3 bg-amber-50 rounded-md border border-amber-200 text-amber-900">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={removeAssociatedDisciplines}
+                      onChange={(e) => setRemoveAssociatedDisciplines(e.target.checked)}
+                      className="mt-0.5 rounded text-rose-600 focus:ring-0"
+                    />
+                    <div>
+                      <span className="font-semibold text-amber-950">
+                        Desvincular e remover as {itemToDelete.associatedCount} turmas associadas no grid
+                      </span>
+                      <p className="text-[11px] text-amber-800 mt-0.5">
+                        Se desmarcado, as turmas permanecerão no grid com o histórico de auditoria intacto.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              )}
             </div>
 
-            {itemToDelete.associatedCount > 0 && (
-              <div className="mt-3 p-3 bg-amber-50 rounded-md border border-amber-200 text-amber-900">
-                <label className="flex items-start gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={removeAssociatedDisciplines}
-                    onChange={(e) => setRemoveAssociatedDisciplines(e.target.checked)}
-                    className="mt-0.5 rounded text-rose-600 focus:ring-0"
-                  />
-                  <div>
-                    <span className="font-semibold text-amber-950">
-                      Desvincular e remover as {itemToDelete.associatedCount} turmas associadas no grid
-                    </span>
-                    <p className="text-[11px] text-amber-800 mt-0.5">
-                      Se desmarcado, as turmas permanecerão no grid com o histórico de auditoria intacto.
-                    </p>
-                  </div>
-                </label>
-              </div>
-            )}
-
-            <div className="mt-5 flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <div className="p-4 sm:px-5 sm:py-3.5 border-t border-slate-100 bg-slate-50/70 flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => setItemToDelete(null)}
-                className="px-3.5 py-1.5 font-medium text-slate-600 hover:text-slate-800 cursor-pointer"
+                className="w-full sm:w-auto px-3.5 py-2 sm:py-1.5 font-medium text-slate-600 hover:text-slate-800 bg-white sm:bg-transparent border border-slate-200 sm:border-transparent rounded-md cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDelete}
-                className="px-4 py-1.5 font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-md shadow-xs transition-colors cursor-pointer"
+                className="w-full sm:w-auto px-4 py-2 sm:py-1.5 font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-md shadow-xs transition-colors cursor-pointer"
               >
                 {itemToDelete.type === 'template' ? 'Confirmar Exclusão' : 'Confirmar Remoção'}
               </button>
@@ -1533,14 +1583,14 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
 
       {/* CONFIRMATION MODAL TO CLEAR ENTIRE DATABASE */}
       {showClearDatabaseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-md w-full p-6 animate-in fade-in zoom-in duration-150 text-xs">
-            <div className="flex items-start gap-3">
-              <div className="p-2.5 rounded-full bg-rose-100 text-rose-600 shrink-0">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl border border-slate-200 max-w-md w-full max-h-[92dvh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-xs">
+            <div className="p-4 sm:p-5 pb-3 border-b border-slate-100 shrink-0 flex items-start gap-3">
+              <div className="p-2 sm:p-2.5 rounded-full bg-rose-100 text-rose-600 shrink-0">
                 <Trash2 className="w-5 h-5" />
               </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
                   Limpar Base de Dados e Dados Importados?
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">
@@ -1549,34 +1599,36 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
               </div>
             </div>
 
-            <div className="mt-4 p-3 bg-rose-50 rounded-md border border-rose-200 text-rose-900 space-y-1.5">
-              <div className="font-semibold text-rose-950">Serão removidos:</div>
-              <ul className="list-disc list-inside text-[11px] text-rose-800 space-y-0.5">
-                <li>Dados extraídos de PDFs e resultados exibidos no Dashboard ({disciplines.length} turmas);</li>
-                <li>Metadados e relatórios PDF em memória e no armazenamento local;</li>
-                <li>Variáveis temporárias, filtros, cálculos e indicadores derivados.</li>
-              </ul>
+            <div className="p-4 sm:p-5 space-y-3 overflow-y-auto flex-1 min-h-0">
+              <div className="p-3 bg-rose-50 rounded-md border border-rose-200 text-rose-900 space-y-1.5">
+                <div className="font-semibold text-rose-950">Serão removidos:</div>
+                <ul className="list-disc list-inside text-[11px] text-rose-800 space-y-0.5">
+                  <li>Dados extraídos de PDFs e resultados exibidos no Dashboard ({disciplines.length} turmas);</li>
+                  <li>Metadados e relatórios PDF em memória e no armazenamento local;</li>
+                  <li>Variáveis temporárias, filtros, cálculos e indicadores derivados.</li>
+                </ul>
+              </div>
+
+              <div className="p-3 bg-blue-50/80 rounded-md border border-blue-200 text-blue-900">
+                <div className="font-semibold text-blue-950 text-[11px]">Serão mantidos intactos:</div>
+                <p className="text-[11px] text-blue-800 mt-0.5">
+                  Configurações e metadados de "Persistência Avançada de Configurações & Metadados" (pesos de fórmulas, metadados institucionais da coordenação e parâmetros de sistema).
+                </p>
+              </div>
             </div>
 
-            <div className="mt-3 p-3 bg-blue-50/80 rounded-md border border-blue-200 text-blue-900">
-              <div className="font-semibold text-blue-950 text-[11px]">Serão mantidos intactos:</div>
-              <p className="text-[11px] text-blue-800 mt-0.5">
-                Configurações e metadados de "Persistência Avançada de Configurações & Metadados" (pesos de fórmulas, metadados institucionais da coordenação e parâmetros de sistema).
-              </p>
-            </div>
-
-            <div className="mt-5 flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <div className="p-4 sm:px-5 sm:py-3.5 border-t border-slate-100 bg-slate-50/70 flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => setShowClearDatabaseModal(false)}
-                className="px-3.5 py-1.5 font-medium text-slate-600 hover:text-slate-800 cursor-pointer"
+                className="w-full sm:w-auto px-3.5 py-2 sm:py-1.5 font-medium text-slate-600 hover:text-slate-800 bg-white sm:bg-transparent border border-slate-200 sm:border-transparent rounded-md cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleConfirmClearDatabase}
-                className="px-4 py-1.5 font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-md shadow-xs transition-colors cursor-pointer"
+                className="w-full sm:w-auto px-4 py-2 sm:py-1.5 font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-md shadow-xs transition-colors cursor-pointer"
               >
                 Confirmar e Limpar Dados
               </button>
@@ -1584,105 +1636,152 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
           </div>
         </div>
       )}
+
       {/* CONFIRMATION MODAL TO REPLACE ENTIRE IMPORT DATA */}
       {showConfirmImportModal && pendingImport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-lg w-full p-6 animate-in fade-in zoom-in duration-150 text-xs">
-            <div className="flex items-start gap-3">
-              <div className="p-2.5 rounded-full bg-blue-100 text-blue-600 shrink-0">
-                <FileText className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  Confirmar Importação & Substituição da Base
-                </h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  Validação concluída. Deseja substituir integralmente a base de dados ativa por este relatório?
-                </p>
-              </div>
-            </div>
-
-            {/* Document Details Card */}
-            <div className="mt-4 p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
-                <span className="text-slate-500 font-medium">Arquivo Analisado:</span>
-                <span className="font-bold text-slate-900 truncate max-w-[240px]" title={pendingImport.sessionMeta.fileName}>
-                  {pendingImport.sessionMeta.fileName}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
-                <div>
-                  <span className="text-slate-500 block">Data de Criação & Hora do Arquivo:</span>
-                  <span className="font-semibold text-slate-800 tabular-nums">
-                    {pendingImport.sessionMeta.fileCreatedAt || pendingImport.sessionMeta.importedAt}
-                  </span>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl border border-slate-200 max-w-lg w-full max-h-[92dvh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-xs">
+            {/* Pinned Modal Header */}
+            <div className="p-4 sm:p-5 pb-3 border-b border-slate-100 shrink-0 flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="p-2 sm:p-2.5 rounded-full bg-blue-100 text-blue-600 shrink-0">
+                  <FileText className="w-5 h-5" />
                 </div>
-                <div>
-                  <span className="text-slate-500 block">Origem da Data:</span>
-                  <span className="font-medium text-slate-700">
-                    {pendingImport.sessionMeta.fileCreatedAtSource || 'Metadado do arquivo'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Campus Identificado:</span>
-                  <span className="font-semibold text-slate-800">{pendingImport.sessionMeta.campus}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Curso:</span>
-                  <span className="font-semibold text-slate-800">{pendingImport.sessionMeta.course}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Tempo de Estudo (Consolidado):</span>
-                  <span className="font-bold text-blue-700 font-mono">{pendingImport.sessionMeta.studyTimeFormatted}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Frequência Média:</span>
-                  <span className="font-bold text-emerald-700 font-mono">
-                    {pendingImport.sessionMeta.attendanceRate.toFixed(2).replace('.', ',')}%
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Total de Turmas:</span>
-                  <span className="font-semibold text-slate-800">{pendingImport.sessionMeta.totalRecords} disciplinas</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Total de Alunos:</span>
-                  <span className="font-semibold text-slate-800">{pendingImport.sessionMeta.totalStudents} matriculados</span>
+                <div className="min-w-0">
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
+                    Confirmar Importação & Substituição da Base
+                  </h3>
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
+                    Validação concluída. Deseja substituir integralmente a base de dados ativa por este relatório?
+                  </p>
                 </div>
               </div>
-            </div>
-
-            {/* Substitution Guarantee Notice */}
-            <div className="mt-3.5 p-3 bg-amber-50 rounded-md border border-amber-200 text-amber-900 space-y-1">
-              <div className="font-bold text-amber-950 flex items-center gap-1.5">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Substituição Atômica Completa</span>
-              </div>
-              <p className="text-[11px] text-amber-800 leading-relaxed">
-                {disciplines.length > 0
-                  ? `A base atual contém ${disciplines.length} turmas. Ao confirmar, todos os dados, rankings e indicadores anteriores serão removidos e substituídos exclusivamente pelos registros deste arquivo. Nenhum registro anterior será mesclado ou reutilizado.`
-                  : 'A base de dados atual está zerada. Os indicadores deste relatório serão carregados como a fonte ativa do Dashboard.'}
-              </p>
-            </div>
-
-            <div className="mt-3 p-2.5 bg-blue-50/70 rounded-md border border-blue-200 text-[11px] text-blue-900">
-              <span className="font-semibold">Preservação:</span> Os pesos de fórmulas matemáticas (LHI/ARS) e metadados institucionais da coordenação permanecerão intactos.
-            </div>
-
-            {/* Actions */}
-            <div className="mt-5 flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
               <button
                 type="button"
                 onClick={handleCancelPendingImport}
-                className="px-3.5 py-1.5 font-medium text-slate-600 hover:text-slate-800 cursor-pointer"
+                aria-label="Fechar"
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-md hover:bg-slate-100 transition-colors shrink-0 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Scrollable Modal Body */}
+            <div className="p-4 sm:p-5 space-y-3 overflow-y-auto flex-1 min-h-0">
+              {/* Document Details Card */}
+              <div className="p-3 sm:p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-slate-200/80">
+                  <span className="text-slate-500 font-medium shrink-0">Arquivo Analisado:</span>
+                  <span
+                    className="font-bold text-slate-900 break-all sm:truncate sm:text-right min-w-0"
+                    title={pendingImport.sessionMeta.fileName}
+                  >
+                    {pendingImport.sessionMeta.fileName}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11px] pt-0.5">
+                  <div>
+                    <span className="text-slate-500 block">Data de Criação & Hora do Arquivo:</span>
+                    <span className="font-semibold text-slate-800 tabular-nums">
+                      {pendingImport.sessionMeta.fileCreatedAt || pendingImport.sessionMeta.importedAt}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Origem da Data:</span>
+                    <span className="font-medium text-slate-700 break-words">
+                      {pendingImport.sessionMeta.fileCreatedAtSource || 'Metadado do arquivo'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Campus Identificado:</span>
+                    <span className="font-semibold text-slate-800 break-words">{pendingImport.sessionMeta.campus}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Curso:</span>
+                    <span className="font-semibold text-slate-800 break-words">{pendingImport.sessionMeta.course}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Tempo de Estudo (Consolidado):</span>
+                    <span className="font-bold text-blue-700 font-mono">{pendingImport.sessionMeta.studyTimeFormatted}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Frequência Média:</span>
+                    <span className="font-bold text-emerald-700 font-mono">
+                      {pendingImport.sessionMeta.attendanceRate.toFixed(2).replace('.', ',')}%
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Total de Turmas:</span>
+                    <span className="font-semibold text-slate-800">{pendingImport.sessionMeta.totalRecords} disciplinas</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Total de Alunos:</span>
+                    <span className="font-semibold text-slate-800">{pendingImport.sessionMeta.totalStudents} matriculados</span>
+                  </div>
+                </div>
+
+                {pendingImport.items.length > 0 && (
+                  <div className="pt-2 border-t border-slate-200/80">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1.5">
+                      Prévia das disciplinas extraídas deste arquivo:
+                    </span>
+                    <div className="space-y-1">
+                      {pendingImport.items.slice(0, 3).map((d) => (
+                        <div
+                          key={d.id}
+                          className="flex items-center justify-between gap-2 text-[11px] text-slate-700 bg-white px-2.5 py-1.5 rounded border border-slate-200/70"
+                        >
+                          <span className="truncate font-medium min-w-0 flex-1" title={d.name}>
+                            <strong className="font-mono text-slate-500 mr-1.5">{d.code}</strong>
+                            {d.name}
+                          </span>
+                          <span className="font-mono font-semibold text-blue-700 shrink-0 tabular-nums">
+                            {d.studyTimeFormatted || '0:00'} · {d.totalStudents} al.
+                          </span>
+                        </div>
+                      ))}
+                      {pendingImport.items.length > 3 && (
+                        <div className="text-[10px] text-slate-500 text-right pt-0.5">
+                          + {pendingImport.items.length - 3} outras disciplinas neste arquivo
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Substitution Guarantee Notice */}
+              <div className="p-3 bg-amber-50 rounded-md border border-amber-200 text-amber-900 space-y-1">
+                <div className="font-bold text-amber-950 flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Substituição Atômica Completa</span>
+                </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  {disciplines.length > 0
+                    ? `A base atual contém ${disciplines.length} turmas. Ao confirmar, todos os dados, rankings e indicadores anteriores serão removidos e substituídos exclusivamente pelos registros deste arquivo. Nenhum registro anterior será mesclado ou reutilizado.`
+                    : 'A base de dados atual está zerada. Os indicadores deste relatório serão carregados como a fonte ativa do Dashboard.'}
+                </p>
+              </div>
+
+              <div className="p-2.5 bg-blue-50/70 rounded-md border border-blue-200 text-[11px] text-blue-900">
+                <span className="font-semibold">Preservação:</span> Os pesos de fórmulas matemáticas (LHI/ARS) e metadados institucionais da coordenação permanecerão intactos.
+              </div>
+            </div>
+
+            {/* Pinned Actions Footer */}
+            <div className="p-4 sm:px-5 sm:py-3.5 border-t border-slate-100 bg-slate-50/70 flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleCancelPendingImport}
+                className="w-full sm:w-auto px-3.5 py-2 sm:py-1.5 font-medium text-slate-600 hover:text-slate-800 bg-white sm:bg-transparent border border-slate-200 sm:border-transparent rounded-md cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleConfirmPendingImport}
-                className="px-4 py-1.5 font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-md shadow-xs transition-colors cursor-pointer"
+                className="w-full sm:w-auto px-4 py-2 sm:py-1.5 font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-md shadow-xs transition-colors cursor-pointer"
               >
                 Confirmar e Substituir Dados
               </button>

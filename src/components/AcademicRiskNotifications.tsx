@@ -298,7 +298,7 @@ export const AcademicRiskNotifications: React.FC<AcademicRiskNotificationsProps>
                             <span aria-hidden="true">·</span>
                             <span>{item.semester}º sem. {item.shift}</span>
                             <span aria-hidden="true">·</span>
-                            <span className="truncate max-w-[180px]" title={item.professor}>
+                            <span className="truncate max-w-full min-w-0" title={item.professor}>
                               {item.professor}
                             </span>
                           </div>
@@ -443,31 +443,31 @@ export const AcademicRiskNotifications: React.FC<AcademicRiskNotificationsProps>
 
         return (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs no-print"
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs no-print"
             onClick={() => setSelectedAlertDiscipline(null)}
           >
             <div
-              className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-4xl w-full overflow-hidden text-xs"
+              className="bg-white rounded-t-2xl sm:rounded-xl shadow-2xl border border-slate-200 max-w-4xl w-full max-h-[92dvh] flex flex-col overflow-hidden text-xs"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Modal Header */}
-              <div className="bg-[#0A3977] text-white px-5 py-3.5 border-b-4 border-[#FFB800] flex items-start justify-between gap-3">
-                <div>
+              <div className="bg-[#0A3977] text-white px-4 sm:px-5 py-3.5 border-b-4 border-[#FFB800] flex items-start justify-between gap-3 shrink-0">
+                <div className="min-w-0">
                   <div className="text-[11px] font-bold uppercase tracking-wider text-[#38BDF8] flex items-center gap-1.5">
-                    <BellRing className="w-3.5 h-3.5" />
-                    <span>Notificação de Risco Acadêmico · Diagnóstico & Plano Tático</span>
+                    <BellRing className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">Notificação de Risco Acadêmico · Diagnóstico & Plano Tático</span>
                   </div>
-                  <h3 className="text-base font-extrabold text-white mt-0.5 leading-snug">
+                  <h3 className="text-sm sm:text-base font-extrabold text-white mt-0.5 leading-snug break-words">
                     {item.name}
                   </h3>
-                  <p className="text-[11px] text-slate-200 mt-0.5">
+                  <p className="text-[11px] text-slate-200 mt-0.5 break-words">
                     {item.code} · Turma {item.classCode} · {item.course} ({item.semester}º sem. · {item.shift}) · {item.professor}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setSelectedAlertDiscipline(null)}
-                  className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                  className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer shrink-0"
                   aria-label="Fechar janela"
                 >
                   <X className="w-4 h-4" />
@@ -475,7 +475,7 @@ export const AcademicRiskNotifications: React.FC<AcademicRiskNotificationsProps>
               </div>
 
               {/* Modal Body */}
-              <div className="p-4 sm:p-5 space-y-4 max-h-[82vh] overflow-y-auto">
+              <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
                 {/* Summary KPI Strip */}
                 <div className="grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-slate-200 bg-slate-50 rounded-xl border border-slate-200 py-2.5 text-center tabular-nums">
                   <div className="px-2 py-1">
@@ -685,28 +685,28 @@ export const AcademicRiskNotifications: React.FC<AcademicRiskNotificationsProps>
               </div>
 
               {/* Modal Footer */}
-              <div className="bg-slate-50 px-5 py-3 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                <div className="text-[11px] text-slate-500">
+              <div className="bg-slate-50 px-4 sm:px-5 py-3 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shrink-0">
+                <div className="text-[11px] text-slate-500 min-w-0 break-words">
                   Fonte: <strong>{activeSession?.fileName || item.sourceFileOrUrl || 'Base Importada'}</strong>
                   {resolveSourceCreatedAtFallback(activeSession, item) && (
                     <span className="tabular-nums"> · Criado em: <strong>{resolveSourceCreatedAtFallback(activeSession, item)}</strong></span>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto shrink-0">
                   <button
                     type="button"
                     onClick={() => {
                       setSelectedAlertDiscipline(null);
                       onNavigateToAudit({ riskOnly: true });
                     }}
-                    className="px-3.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold rounded-lg transition-colors cursor-pointer"
+                    className="w-full sm:w-auto px-3.5 py-2 sm:py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold rounded-lg transition-colors cursor-pointer text-center"
                   >
                     Abrir na Auditoria
                   </button>
                   <button
                     type="button"
                     onClick={() => setSelectedAlertDiscipline(null)}
-                    className="px-4 py-1.5 bg-[#0A3977] hover:bg-blue-800 text-white font-bold rounded-lg transition-colors cursor-pointer"
+                    className="w-full sm:w-auto px-4 py-2 sm:py-1.5 bg-[#0A3977] hover:bg-blue-800 text-white font-bold rounded-lg transition-colors cursor-pointer text-center"
                   >
                     Fechar
                   </button>

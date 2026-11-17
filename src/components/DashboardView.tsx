@@ -290,6 +290,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* EXECUTIVE DASHBOARD CANVAS */}
       <div id="print-executive-report">
         <ExecutiveDashboardCanvas
+          key={`exec-${activeSession?.importId || 'empty'}`}
           disciplines={disciplines}
           activeSession={activeSession}
           config={config}
@@ -299,6 +300,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* Sistema de Notificações de Risco Acadêmico (Top 3 LHI mais crítico) */}
       <AcademicRiskNotifications
+        key={`risk-${activeSession?.importId || 'empty'}`}
         disciplines={disciplines}
         activeSession={activeSession}
         config={config}

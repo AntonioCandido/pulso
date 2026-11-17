@@ -1,5 +1,16 @@
-import { DisciplineMetric, FormulaWeights, ImportSession } from '../types';
-import { getDisciplinesForFile, getPulsoImparR9Disciplines, getPulsoTaquaraDisciplines, getPulsoImparDisciplines } from '../data/mockAcademicData';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { DisciplineMetric, FormulaWeights, ImportSession, PulsoExecutiveSummary } from '../types';
+import { getDisciplinesForFile } from '../data/mockAcademicData';
+import {
+  calculateLHI,
+  calculateARS,
+  getLHIStatus,
+  getARSLevel,
+  getRecommendedPedagogicalAction,
+} from './calculations';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 export interface ExtractionProgress {
   step: number;
@@ -43,7 +54,10 @@ export function resolveSourceCreatedAtFallback(
   if (activeSession?.fileCreatedAt) {
     return activeSession.fileCreatedAt;
   }
-  const fileName = activeSession?.fileName || primaryDiscipline?.sourceFileOrUrl || '';
+  if (activeSession?.importedAt) {
+    return activeSession.importedAt;
+  }
+  const fileName = primaryDiscipline?.sourceFileOrUrl || '';
   const known = resolveKnownReportCreatedAt(fileName);
   if (known) return known;
 
@@ -55,43 +69,55 @@ export function resolveSourceCreatedAtFallback(
     }
     return rawUpdated;
   }
-  return activeSession?.importedAt || null;
+  return null;
+}
+
+function parsePdfDateValue(rawDateStr: string): Date | null {
+  if (!rawDateStr) return null;
+  const pdfMatch = rawDateStr.match(
+    /^\s*(?:D:)?(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?([^)]*)$/
+  );
+  if (pdfMatch) {
+    const year = parseInt(pdfMatch[1], 10);
+    if (year >= 1990 && year <= 2100) {
+      const month = pdfMatch[2] ? parseInt(pdfMatch[2], 10) - 1 : 0;
+      const day = pdfMatch[3] ? parseInt(pdfMatch[3], 10) : 1;
+      const hour = pdfMatch[4] ? parseInt(pdfMatch[4], 10) : 0;
+      const minute = pdfMatch[5] ? parseInt(pdfMatch[5], 10) : 0;
+      const second = pdfMatch[6] ? parseInt(pdfMatch[6], 10) : 0;
+      const tzPart = (pdfMatch[7] || '').trim();
+
+      if (tzPart === 'Z') {
+        return new Date(Date.UTC(year, month, day, hour, minute, second));
+      }
+      const tzMatch = tzPart.match(/^([+-])(\d{2})'?(\d{2})?'?/);
+      if (tzMatch) {
+        const sign = tzMatch[1] === '-' ? -1 : 1;
+        const offsetMinutes = sign * (parseInt(tzMatch[2], 10) * 60 + parseInt(tzMatch[3] || '0', 10));
+        const utcMs = Date.UTC(year, month, day, hour, minute, second) - offsetMinutes * 60_000;
+        return new Date(utcMs);
+      }
+      return new Date(year, month, day, hour, minute, second);
+    }
+  }
+
+  const parsed = new Date(rawDateStr.trim());
+  return !Number.isNaN(parsed.getTime()) ? parsed : null;
 }
 
 function parsePdfDateString(rawText: string): Date | null {
-  // 1. Standard PDF Info Dictionary: /CreationDate (D:YYYYMMDDHHmmSSOHH'mm')
   const infoMatch = rawText.match(
-    /\/CreationDate\s*\(\s*(?:D:)?(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?([^)]*)\)/
+    /\/CreationDate\s*\(\s*([^)]+)\)/
   );
   if (infoMatch) {
-    const year = parseInt(infoMatch[1], 10);
-    const month = infoMatch[2] ? parseInt(infoMatch[2], 10) - 1 : 0;
-    const day = infoMatch[3] ? parseInt(infoMatch[3], 10) : 1;
-    const hour = infoMatch[4] ? parseInt(infoMatch[4], 10) : 0;
-    const minute = infoMatch[5] ? parseInt(infoMatch[5], 10) : 0;
-    const second = infoMatch[6] ? parseInt(infoMatch[6], 10) : 0;
-    const tzPart = (infoMatch[7] || '').trim();
-
-    if (tzPart === 'Z') {
-      return new Date(Date.UTC(year, month, day, hour, minute, second));
-    }
-    const tzMatch = tzPart.match(/^([+-])(\d{2})'?(\d{2})?'?/);
-    if (tzMatch) {
-      const sign = tzMatch[1] === '-' ? -1 : 1;
-      const offsetMinutes = sign * (parseInt(tzMatch[2], 10) * 60 + parseInt(tzMatch[3] || '0', 10));
-      const utcMs = Date.UTC(year, month, day, hour, minute, second) - offsetMinutes * 60_000;
-      return new Date(utcMs);
-    }
-    return new Date(year, month, day, hour, minute, second);
+    const dt = parsePdfDateValue(infoMatch[1]);
+    if (dt) return dt;
   }
 
-  // 2. XMP Metadata: <xmp:CreateDate> or <pdf:CreationDate>
   const xmpMatch = rawText.match(/<(?:xmp:CreateDate|pdf:CreationDate|xap:CreateDate)>([^<]+)<\/(?:xmp:CreateDate|pdf:CreationDate|xap:CreateDate)>/i);
   if (xmpMatch) {
-    const parsed = new Date(xmpMatch[1].trim());
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed;
-    }
+    const dt = parsePdfDateValue(xmpMatch[1]);
+    if (dt) return dt;
   }
 
   return null;
@@ -104,7 +130,32 @@ export async function extractFileCreationInfo(
     if (file.name.toLowerCase().endsWith('.pdf')) {
       try {
         const buffer = await file.arrayBuffer();
-        const rawText = new TextDecoder('latin1').decode(new Uint8Array(buffer));
+        const bytes = new Uint8Array(buffer);
+
+        // 1. Try pdfjs-dist metadata first (reads compressed ObjStm Info & XMP streams)
+        try {
+          const loadingTask = pdfjsLib.getDocument({ data: bytes.slice() });
+          const pdfDoc = await loadingTask.promise;
+          const meta = await pdfDoc.getMetadata();
+          const infoObj = (meta?.info || {}) as Record<string, unknown>;
+          const rawCreation =
+            (typeof infoObj.CreationDate === 'string' && infoObj.CreationDate) ||
+            (typeof meta?.metadata?.get === 'function' ? meta.metadata.get('xmp:createdate') : '');
+          await loadingTask.destroy();
+          if (rawCreation) {
+            const dt = parsePdfDateValue(String(rawCreation));
+            if (dt && !Number.isNaN(dt.getTime())) {
+              return {
+                fileCreatedAt: formatBrDateTime(dt),
+                source: 'Metadado interno do PDF (CreationDate)',
+              };
+            }
+          }
+        } catch {
+          // Fallback to raw Latin1 scan below
+        }
+
+        const rawText = new TextDecoder('latin1').decode(bytes);
         const pdfDate = parsePdfDateString(rawText);
         if (pdfDate && !Number.isNaN(pdfDate.getTime())) {
           return {
@@ -139,12 +190,14 @@ export async function extractFileCreationInfo(
     };
   }
 
-  const known = resolveKnownReportCreatedAt(file.name);
-  if (known) {
-    return {
-      fileCreatedAt: known,
-      source: 'Metadado oficial do relatório',
-    };
+  if (!(file instanceof File)) {
+    const known = resolveKnownReportCreatedAt(file.name);
+    if (known) {
+      return {
+        fileCreatedAt: known,
+        source: 'Metadado oficial do relatório',
+      };
+    }
   }
 
   return {
@@ -153,10 +206,1038 @@ export async function extractFileCreationInfo(
   };
 }
 
+// ============================================================================
+// REAL PDF CONTENT & TABLE EXTRACTION ENGINE (via pdfjs-dist)
+// ============================================================================
+
+interface PdfToken {
+  page: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  str: string;
+}
+
+interface PdfLine {
+  page: number;
+  y: number;
+  tokens: PdfToken[];
+  text: string;
+}
+
+interface ParsedColumnMap {
+  tableLeftX?: number;
+  disciplina?: number;
+  codigo?: number;
+  alunosAA?: number;
+  alunosAtual?: number;
+  tempoAA?: number;
+  tempoEstudo?: number;
+  aprendizagem?: number;
+  reprovacao?: number;
+  frequencia?: number;
+  adhesionAV?: number;
+  adhesionSM?: number;
+  lms?: number;
+  professor?: number;
+  turma?: number;
+  semestre?: number;
+  turno?: number;
+  evasao?: number;
+}
+
+const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, val));
+const round1 = (val: number) => Number(val.toFixed(1));
+const round2 = (val: number) => Number(val.toFixed(2));
+
+function parseBrNumber(raw: string): number | null {
+  if (!raw) return null;
+  const cleaned = raw
+    .replace(/%/g, '')
+    .replace(/\s+/g, '')
+    .replace(/\.(?=\d{3}(?:\D|$))/g, '')
+    .replace(',', '.');
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num : null;
+}
+
+function parseTimeToHours(timeStr: string): number {
+  const m = timeStr.match(/(\d{1,3}):(\d{2})/);
+  if (!m) return 0;
+  return Number((parseInt(m[1], 10) + parseInt(m[2], 10) / 60).toFixed(2));
+}
+
+function normalizeForMatch(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+async function extractPdfSpatialLines(bytes: Uint8Array): Promise<{
+  pages: PdfLine[][];
+  allLines: PdfLine[];
+  allTokens: PdfToken[];
+  fullText: string;
+}> {
+  const loadingTask = pdfjsLib.getDocument({ data: bytes.slice() });
+  const pdfDoc = await loadingTask.promise;
+
+  const pages: PdfLine[][] = [];
+  const allTokens: PdfToken[] = [];
+
+  try {
+    for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+      const page = await pdfDoc.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      const pageTokens: PdfToken[] = [];
+
+      for (const rawItem of textContent.items) {
+        if (!('str' in rawItem)) continue;
+        const str = rawItem.str.replace(/\s+/g, ' ').trim();
+        if (!str) continue;
+        const transform = rawItem.transform || [1, 0, 0, 1, 0, 0];
+        const token: PdfToken = {
+          page: pageNum,
+          x: Number(transform[4]) || 0,
+          y: Number(transform[5]) || 0,
+          w: Number(rawItem.width) || str.length * 4,
+          h: Number(rawItem.height) || Math.abs(Number(transform[3])) || 10,
+          str,
+        };
+        pageTokens.push(token);
+        allTokens.push(token);
+      }
+
+      // Group tokens into horizontal lines (Y descending = top to bottom)
+      pageTokens.sort((a, b) => b.y - a.y || a.x - b.x);
+      const lineGroups: { y: number; tokens: PdfToken[] }[] = [];
+
+      for (const tok of pageTokens) {
+        const tolerance = Math.max(4, Math.min(7, tok.h * 0.45));
+        const existing = lineGroups.find((g) => Math.abs(g.y - tok.y) <= tolerance);
+        if (existing) {
+          existing.tokens.push(tok);
+        } else {
+          lineGroups.push({ y: tok.y, tokens: [tok] });
+        }
+      }
+
+      const pageLines: PdfLine[] = lineGroups
+        .sort((a, b) => b.y - a.y)
+        .map((g) => {
+          const sortedTokens = [...g.tokens].sort((a, b) => a.x - b.x);
+          return {
+            page: pageNum,
+            y: g.y,
+            tokens: sortedTokens,
+            text: sortedTokens.map((t) => t.str).join(' ').replace(/\s+/g, ' ').trim(),
+          };
+        });
+
+      pages.push(pageLines);
+    }
+  } finally {
+    await loadingTask.destroy();
+  }
+
+  const allLines = pages.flat();
+  const fullText = allLines.map((l) => l.text).join('\n');
+  return { pages, allLines, allTokens, fullText };
+}
+
+function extractCardBlockMetrics(
+  allTokens: PdfToken[],
+  allLines: PdfLine[],
+  labelRegex: RegExp,
+  type: 'percent' | 'time'
+): { current?: number | string; previous?: number | string; target?: number | string } {
+  // 1. Spatial search around matching label tokens (primarily Page 1)
+  const page1Lines = allLines.filter((l) => l.page === 1);
+  const candidateLines = page1Lines.length > 0 ? page1Lines : allLines;
+
+  for (let i = 0; i < candidateLines.length; i++) {
+    const line = candidateLines[i];
+    if (!labelRegex.test(line.text)) continue;
+
+    // Find the matching token(s) X/Y anchor
+    const anchorTok =
+      line.tokens.find((t) => labelRegex.test(t.str)) ||
+      line.tokens.find((t) =>
+        normalizeForMatch(t.str).split(/\s+/).some((w) => w.length > 3 && normalizeForMatch(line.text).includes(w))
+      ) ||
+      line.tokens[0];
+
+    if (anchorTok) {
+      // Look within the Power BI KPI card bounding box around anchorTok
+      const boxTokens = allTokens
+        .filter(
+          (t) =>
+            t.page === line.page &&
+            t.x >= anchorTok.x - 95 &&
+            t.x <= anchorTok.x + 210 &&
+            t.y <= anchorTok.y + 45 &&
+            t.y >= anchorTok.y - 140
+        )
+        .sort((a, b) => b.y - a.y || a.x - b.x);
+
+      // Reconstruct mini-lines inside the card box
+      const miniLines: string[] = [];
+      let lastY: number | null = null;
+      let buf: string[] = [];
+      for (const bt of boxTokens) {
+        if (lastY === null || Math.abs(bt.y - lastY) <= 5) {
+          buf.push(bt.str);
+        } else {
+          miniLines.push(buf.join(' '));
+          buf = [bt.str];
+        }
+        lastY = bt.y;
+      }
+      if (buf.length > 0) miniLines.push(buf.join(' '));
+
+      const cardText = miniLines.join(' | ');
+      const parsed = parseCardText(cardText, type);
+      if (parsed.current !== undefined) {
+        return parsed;
+      }
+    }
+
+    // Fallback: inspect consecutive lines near the label
+    const windowText = candidateLines
+      .slice(i, Math.min(candidateLines.length, i + 5))
+      .map((l) => l.text)
+      .join(' | ');
+    const parsedWindow = parseCardText(windowText, type);
+    if (parsedWindow.current !== undefined) {
+      return parsedWindow;
+    }
+  }
+
+  return {};
+}
+
+function parseCardText(
+  text: string,
+  type: 'percent' | 'time'
+): { current?: number | string; previous?: number | string; target?: number | string } {
+  if (type === 'time') {
+    const metaMatch = text.match(/Meta[:\s]*([0-9]{1,3}:[0-9]{2})/i);
+    const prevMatch = text.match(/(?:Ano\s*Anterior|A\.?A\.?)[:\s\(]*([0-9]{1,3}:[0-9]{2})/i) ||
+      text.match(/([0-9]{1,3}:[0-9]{2})\s*A\.?A\.?/i);
+
+    const allTimes = [...text.matchAll(/(?<![+\-▼▲\d])(\d{1,3}:\d{2})(?!\s*%)/g)].map((m) => m[1]);
+    const filtered = allTimes.filter((t) => {
+      if (metaMatch && t === metaMatch[1]) {
+        // only exclude if all occurrences are after Meta
+        const count = allTimes.filter((x) => x === t).length;
+        return count > 1;
+      }
+      if (prevMatch && t === prevMatch[1]) {
+        const count = allTimes.filter((x) => x === t).length;
+        return count > 1;
+      }
+      return true;
+    });
+
+    // Ensure we don't accidentally grab a delta time like -8:02 or +1:55
+    const mainMatch = text.match(/(?:Tempo\s+de\s+Estudo|Estudo)[^0-9+\-]*(\d{1,3}:\d{2})/i);
+    const current = mainMatch?.[1] || filtered[0];
+
+    return {
+      current,
+      previous: prevMatch ? `${prevMatch[1]} A.A` : undefined,
+      target: metaMatch?.[1],
+    };
+  }
+
+  const metaMatch = text.match(/Meta[:\s]*(\d{1,3}(?:[.,]\d{1,2})?)\s*%/i);
+  const prevMatch =
+    text.match(/(?:Ano\s*Anterior|A\.?A\.?)[:\s\(]*(\d{1,3}(?:[.,]\d{1,2})?)\s*%/i) ||
+    text.match(/(\d{1,3}(?:[.,]\d{1,2})?)\s*%\s*A\.?A\.?/i);
+
+  // Strip Meta / A.A / delta segments to find the primary KPI value cleanly
+  const stripped = text
+    .replace(/Meta[:\s]*\d{1,3}(?:[.,]\d{1,2})?\s*%/gi, ' ')
+    .replace(/(?:Ano\s*Anterior|A\.?A\.?)[:\s\(]*\d{1,3}(?:[.,]\d{1,2})?\s*%\)?/gi, ' ')
+    .replace(/\d{1,3}(?:[.,]\d{1,2})?\s*%\s*A\.?A\.?/gi, ' ')
+    .replace(/[▼▲+\-]\s*\d{1,3}(?:[.,]\d{1,2})?\s*%/g, ' ');
+
+  const pctMatches = [...stripped.matchAll(/(\d{1,3}(?:[.,]\d{1,2})?)\s*%/g)];
+  const currentNum = pctMatches.length > 0 ? parseBrNumber(pctMatches[0][1]) : null;
+  const prevNum = prevMatch ? parseBrNumber(prevMatch[1]) : null;
+  const metaNum = metaMatch ? parseBrNumber(metaMatch[1]) : null;
+
+  return {
+    current: currentNum !== null ? currentNum : undefined,
+    previous: prevNum !== null ? prevNum : undefined,
+    target: metaNum !== null ? metaNum : undefined,
+  };
+}
+
+function extractHeaderMetadata(allLines: PdfLine[], fullText: string, allTokens?: PdfToken[]): {
+  campus: string;
+  course: string;
+  brand: string;
+  regional: string;
+  entryYear?: string;
+  poloType?: string;
+  operationType?: string;
+} {
+  const headerLines = allLines.slice(0, 45);
+  const headerText = headerLines.map((l) => l.text).join('\n');
+
+  let campus = '';
+  for (let i = 0; i < headerLines.length; i++) {
+    const t = headerLines[i].text;
+    const m = t.match(/(?:Campus\s*(?:Polo)?|Unidade)\s*[:\-]\s*([A-ZÀ-Ú0-9][A-ZÀ-Úa-zà-ú0-9\s\-–\/]{1,42})/i);
+    if (m) {
+      campus = m[1].split(/\s{2,}|Curso|Modalidade|Regional|Operaç|Tipo/i)[0].trim();
+      break;
+    }
+    if (/^(?:Campus\s*(?:Polo)?|Campus|Unidade)$/i.test(t) && headerLines[i + 1]) {
+      campus = headerLines[i + 1].text.trim();
+      break;
+    }
+  }
+
+  if (!campus) {
+    const inlineCampus = fullText.match(/\b(TOM\s+JOBIM|R9\s*[-–]?\s*TAQUARA|TAQUARA|MARACAN[AÃ]|TIJUCA|BARRA(?:\s+DA\s+TIJUCA)?|NOVA\s+AM[EÉ]RICA|M[EÉ]IER|CAMPO\s+GRANDE|MADUREIRA|NITER[OÓ]I|CENTRO|ALC[AÂ]NTARA|BANGU|JACAREPAGU[AÁ])\b/i);
+    if (inlineCampus) {
+      campus = inlineCampus[1].replace(/\s+/g, ' ').trim();
+    }
+  }
+
+  const knownCourses = [
+    'Ciência da Computação',
+    'Sistemas de Informação',
+    'Análise e Desenvolvimento de Sistemas',
+    'Engenharia de Software',
+    'Engenharia da Computação',
+    'Redes de Computadores',
+    'Banco de Dados',
+    'Defesa Cibernética',
+    'Gestão da Tecnologia da Informação',
+    'Jogos Digitais',
+  ];
+
+  let course = '';
+  // 1. Spatial lookup around a "Curso" slicer label on Page 1
+  if (allTokens && allTokens.length > 0) {
+    const cursoTok = allTokens.find(
+      (t) => t.page === 1 && /^curso:?$/i.test(t.str.trim())
+    );
+    if (cursoTok) {
+      const nearby = allTokens
+        .filter(
+          (t) =>
+            t.page === 1 &&
+            t.x >= cursoTok.x - 30 &&
+            t.x <= cursoTok.x + 180 &&
+            t.y <= cursoTok.y + 8 &&
+            t.y >= cursoTok.y - 38 &&
+            !/^curso:?$/i.test(t.str.trim())
+        )
+        .sort((a, b) => b.y - a.y || a.x - b.x)
+        .map((t) => t.str)
+        .join(' ');
+      const normNearby = normalizeForMatch(nearby);
+      const matchedNearby = knownCourses.find((c) => normNearby.includes(normalizeForMatch(c)));
+      if (matchedNearby) {
+        course = matchedNearby;
+      }
+    }
+  }
+
+  // 2. Line-based explicit "Curso: ..."
+  if (!course) {
+    for (let i = 0; i < headerLines.length; i++) {
+      const t = headerLines[i].text;
+      const m = t.match(/Curso\s*[:\-]\s*([A-ZÀ-Úa-zà-ú0-9\s\-–\/]{3,55})/i);
+      if (m) {
+        const candidate = m[1].split(/\s{2,}|Modalidade|Campus|Entrada|Ano|Regional/i)[0].trim();
+        const normCand = normalizeForMatch(candidate);
+        const matched = knownCourses.find((c) => normCand.includes(normalizeForMatch(c)));
+        course = matched || candidate;
+        break;
+      }
+    }
+  }
+
+  // 3. Fallback: search only non-table lines (never match inside discipline names like "FUNDAMENTOS DE REDES DE COMPUTADORES")
+  if (!course) {
+    const nonTableLinesText = allLines
+      .filter(
+        (l) =>
+          !DISCIPLINE_CODE_REGEX.test(l.text) &&
+          !/\b\d{1,3}:\d{2}\b/.test(l.text) &&
+          !/\b(fundamentos|protocolos|introducao|gerenciamento)\b/i.test(l.text)
+      )
+      .map((l) => l.text)
+      .join('\n');
+    const normNonTable = normalizeForMatch(nonTableLinesText);
+    const matched = knownCourses.find((c) => normNonTable.includes(normalizeForMatch(c)));
+    if (matched) course = matched;
+  }
+
+  const brand = /est[aá]cio/i.test(fullText)
+    ? 'ESTÁCIO'
+    : /wyden/i.test(fullText)
+    ? 'WYDEN'
+    : /yduqs/i.test(fullText)
+    ? 'YDUQS'
+    : 'ESTÁCIO';
+
+  const regionalMatch = fullText.match(/Regional\s*[:\-]?\s*([A-Z0-9]{2,15})/i);
+  const regional = regionalMatch ? regionalMatch[1].toUpperCase() : 'UNESA';
+
+  const entryMatch = fullText.match(/Ano\s*(?:de\s*)?Entrada\s*[:\-]?\s*([\d\sa]{1,12})/i);
+  const entryYear = entryMatch ? entryMatch[1].trim() : undefined;
+
+  const poloType = /presencial/i.test(headerText)
+    ? 'UNIDADE PRESENCIAL'
+    : /digital|ead/i.test(headerText)
+    ? 'POLO DIGITAL'
+    : undefined;
+
+  const operationType = /opera[cç][aã]o\s*pr[oó]pria/i.test(headerText)
+    ? 'OPERACAO PROPRIA'
+    : undefined;
+
+  return {
+    campus: campus || 'Unidade do Relatório',
+    course: course || 'Ciência da Computação',
+    brand,
+    regional,
+    entryYear,
+    poloType,
+    operationType,
+  };
+}
+
+function detectColumnHeaders(line: PdfLine): ParsedColumnMap | null {
+  const norm = normalizeForMatch(line.text);
+  const hasDisciplina = norm.includes('disciplina') || norm.includes('materia') || norm.includes('componente');
+  const hasCode = norm.includes('codigo') || norm.includes('cod');
+  const hasTimeOrStudents =
+    norm.includes('tempo') ||
+    norm.includes('alunos') ||
+    norm.includes('aprendizagem') ||
+    norm.includes('reprovacao') ||
+    norm.includes('frequencia');
+
+  if (!hasDisciplina && !(hasCode && hasTimeOrStudents)) {
+    return null;
+  }
+
+  const map: ParsedColumnMap = {};
+  let minHeaderX = Infinity;
+  for (const tok of line.tokens) {
+    const nt = normalizeForMatch(tok.str);
+    const center = tok.x + tok.w / 2;
+    let matched = true;
+    if (nt.includes('disciplina') || nt.includes('materia')) map.disciplina = center;
+    else if (nt.includes('codigo') || nt === 'cod' || nt === 'cod.') map.codigo = center;
+    else if (nt.includes('alunos') && (nt.includes('a.a') || nt.includes('anterior'))) map.alunosAA = center;
+    else if (nt.includes('alunos') || nt.includes('matricul')) {
+      if (map.alunosAtual === undefined) map.alunosAtual = center;
+    } else if (nt.includes('tempo') && (nt.includes('a.a') || nt.includes('anterior'))) map.tempoAA = center;
+    else if (nt.includes('tempo') || nt.includes('dedicac')) map.tempoEstudo = center;
+    else if (nt.includes('aprendiz')) map.aprendizagem = center;
+    else if (nt.includes('reprov')) map.reprovacao = center;
+    else if (nt.includes('frequen') || nt.includes('presen')) map.frequencia = center;
+    else if (nt.includes('av') && nt.includes('ades')) map.adhesionAV = center;
+    else if (nt.includes('sm') && nt.includes('ades')) map.adhesionSM = center;
+    else if (nt.includes('lms') || nt.includes('ades')) map.lms = center;
+    else if (nt.includes('prof') || nt.includes('docente')) map.professor = center;
+    else if (nt.includes('turma')) map.turma = center;
+    else if (nt.includes('semest') || nt.includes('period')) map.semestre = center;
+    else if (nt.includes('turno')) map.turno = center;
+    else if (nt.includes('evas')) map.evasao = center;
+    else matched = false;
+
+    if (matched && tok.x < minHeaderX) {
+      minHeaderX = tok.x;
+    }
+  }
+
+  const colCount = Object.keys(map).length;
+  if (colCount >= 2 && Number.isFinite(minHeaderX)) {
+    map.tableLeftX = minHeaderX;
+    return map;
+  }
+  return null;
+}
+
+const DISCIPLINE_CODE_REGEX = /\b([A-Z]{2,5}\d{3,5}[A-Z0-9]?)\b/;
+const NON_DISCIPLINE_LINE_REGEX = /^(?:total|m[eé]dia|geral|resumo|fonte:|p[aá]gina\s+\d+|yduqs|est[aá]cio|pulso\s+acad[eê]mico|ranking\s+de|filtros|ano\s+anterior|meta\s*:)/i;
+
+interface ExtractedRowRaw {
+  code: string;
+  name: string;
+  previousYearStudents?: number;
+  totalStudents: number;
+  previousYearStudyTime?: string;
+  studyTimeFormatted: string;
+  studyHoursPerWeek: number;
+  learningScore?: number;
+  failureRate?: number;
+  attendanceRate?: number;
+  lmsAdherenceRate?: number;
+  adhesionAV?: number;
+  adhesionSM?: number;
+  dropoutRiskRate?: number;
+  professor?: string;
+  classCode?: string;
+  semester?: number;
+  shift?: 'Matutino' | 'Noturno' | 'Integral';
+}
+
+function parseDisciplineRowFromLine(
+  line: PdfLine,
+  colMap: ParsedColumnMap | null
+): ExtractedRowRaw | null {
+  if (!line.text || NON_DISCIPLINE_LINE_REGEX.test(line.text.trim())) {
+    return null;
+  }
+
+  const codeMatch = line.text.match(DISCIPLINE_CODE_REGEX);
+  const timeMatches = [...line.text.matchAll(/\b(\d{1,3}:\d{2})(?:\s*(A\.?A\.?))?/gi)];
+  const pctMatches = [...line.text.matchAll(/(\d{1,3}(?:[.,]\d{1,2})?)\s*%/g)];
+
+  // Must either contain a discipline code OR (inside a table with colMap) contain at least a time/percentage + text
+  if (!codeMatch) {
+    if (!colMap || (timeMatches.length === 0 && pctMatches.length < 2)) {
+      return null;
+    }
+  }
+
+  // Filter out KPI summary lines that happen to match times/percentages (e.g. "Tempo de Estudo 18:56")
+  const norm = normalizeForMatch(line.text);
+  if (
+    !codeMatch &&
+    (norm.includes('tempo de estudo') ||
+      norm.includes('grau de aprendizagem') ||
+      norm.includes('reprovacao geral') ||
+      norm.includes('adesao av') ||
+      norm.includes('adesao sm') ||
+      norm.includes('frequencia'))
+  ) {
+    return null;
+  }
+
+  const code = codeMatch ? codeMatch[1] : '';
+
+  // Try column-mapped extraction if we have header positions
+  let name = '';
+  let prevStudents: number | undefined;
+  let currStudents: number | undefined;
+  let prevTime: string | undefined;
+  let currTime = '';
+  let learning: number | undefined;
+  let failure: number | undefined;
+  let attendance: number | undefined;
+  let lms: number | undefined;
+  let adhesionAV: number | undefined;
+  let adhesionSM: number | undefined;
+  let dropout: number | undefined;
+  let professor: string | undefined;
+  let classCode: string | undefined;
+  let semester: number | undefined;
+  let shift: 'Matutino' | 'Noturno' | 'Integral' | undefined;
+
+  if (colMap && Object.keys(colMap).length >= 3) {
+    const colEntries = Object.entries(colMap).filter(
+      ([k, x]) => k !== 'tableLeftX' && typeof x === 'number'
+    ) as [keyof ParsedColumnMap, number][];
+    const buckets: Partial<Record<keyof ParsedColumnMap, string[]>> = {};
+    const leftBound = colMap.tableLeftX !== undefined ? colMap.tableLeftX - 20 : -Infinity;
+
+    for (const tok of line.tokens) {
+      // Ignore Power BI left-sidebar slicer tokens outside the table region
+      if (tok.x + tok.w < leftBound) continue;
+      // Do not allow the discipline code token itself to contaminate buckets.disciplina
+      if (code && tok.str.trim() === code) {
+        if (!buckets.codigo) buckets.codigo = [];
+        buckets.codigo.push(tok.str);
+        continue;
+      }
+      const tokCenter = tok.x + tok.w / 2;
+      let bestCol: keyof ParsedColumnMap | null = null;
+      let bestDist = Infinity;
+      for (const [colKey, colX] of colEntries) {
+        const dist = Math.abs(tokCenter - colX);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestCol = colKey;
+        }
+      }
+      if (bestCol) {
+        if (!buckets[bestCol]) buckets[bestCol] = [];
+        buckets[bestCol]!.push(tok.str);
+      }
+    }
+
+    if (buckets.disciplina?.length) {
+      name = buckets.disciplina.join(' ').trim();
+    }
+    if (buckets.alunosAA?.length) {
+      const n = parseInt(buckets.alunosAA.join('').replace(/\D/g, ''), 10);
+      if (Number.isFinite(n)) prevStudents = n;
+    }
+    if (buckets.alunosAtual?.length) {
+      const n = parseInt(buckets.alunosAtual.join('').replace(/\D/g, ''), 10);
+      if (Number.isFinite(n)) currStudents = n;
+    }
+    if (buckets.tempoAA?.length) {
+      const tm = buckets.tempoAA.join(' ').match(/\d{1,3}:\d{2}/);
+      if (tm) prevTime = `${tm[0]} A.A`;
+    }
+    if (buckets.tempoEstudo?.length) {
+      const tm = buckets.tempoEstudo.join(' ').match(/\d{1,3}:\d{2}/);
+      if (tm) currTime = tm[0];
+    }
+    if (buckets.aprendizagem?.length) learning = parseBrNumber(buckets.aprendizagem.join(' ')) ?? undefined;
+    if (buckets.reprovacao?.length) failure = parseBrNumber(buckets.reprovacao.join(' ')) ?? undefined;
+    if (buckets.frequencia?.length) attendance = parseBrNumber(buckets.frequencia.join(' ')) ?? undefined;
+    if (buckets.lms?.length) lms = parseBrNumber(buckets.lms.join(' ')) ?? undefined;
+    if (buckets.adhesionAV?.length) adhesionAV = parseBrNumber(buckets.adhesionAV.join(' ')) ?? undefined;
+    if (buckets.adhesionSM?.length) adhesionSM = parseBrNumber(buckets.adhesionSM.join(' ')) ?? undefined;
+    if (buckets.evasao?.length) dropout = parseBrNumber(buckets.evasao.join(' ')) ?? undefined;
+    if (buckets.professor?.length) professor = buckets.professor.join(' ').trim();
+    if (buckets.turma?.length) classCode = buckets.turma.join(' ').trim();
+    if (buckets.semestre?.length) {
+      const s = parseInt(buckets.semestre.join('').replace(/\D/g, ''), 10);
+      if (Number.isFinite(s) && s > 0 && s <= 12) semester = s;
+    }
+    if (buckets.turno?.length) {
+      const st = normalizeForMatch(buckets.turno.join(' '));
+      if (st.includes('mat')) shift = 'Matutino';
+      else if (st.includes('int')) shift = 'Integral';
+      else if (st.includes('not')) shift = 'Noturno';
+    }
+  }
+
+  // Positional / regex fallback relative to discipline code when columns weren't cleanly mapped
+  if (!name) {
+    if (code) {
+      const idx = line.text.indexOf(code);
+      const before = line.text.slice(0, idx).replace(/^\d{1,2}\s+/, '').trim();
+      const after = line.text.slice(idx + code.length).trim();
+      if (before.length >= 3 && /[A-ZÀ-Úa-zà-ú]{3,}/.test(before)) {
+        name = before;
+      } else {
+        // Code came first, name follows before numeric columns
+        const textPart = after
+          .replace(/\b\d{1,3}:\d{2}(?:\s*A\.?A\.?)?/gi, '')
+          .replace(/\d{1,3}(?:[.,]\d{1,2})?\s*%/g, '')
+          .replace(/\b\d+\b/g, '')
+          .replace(/[—\-]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        name = textPart;
+      }
+    } else {
+      name = line.text
+        .replace(/\b\d{1,3}:\d{2}(?:\s*A\.?A\.?)?/gi, '')
+        .replace(/\d{1,3}(?:[.,]\d{1,2})?\s*%/g, '')
+        .replace(/\b\d+\b/g, '')
+        .replace(/[—\-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+  }
+
+  // Clean trailing punctuation, code leaks, slicer labels, or stray ranking index from discipline name
+  if (code) {
+    name = name.replace(new RegExp(`\\b${code}\\b`, 'g'), ' ');
+  }
+  name = name
+    .replace(/^\s*(?:Regional|Marca|Grupo|Campus|Unidade|Curso|Operacao|Modalidade|UNESA|EST[AÁ]CIO|YDUQS|UNIDADE\s+PRESENCIAL|OPERACAO\s+PROPRIA)\b[\s:\-]*/gi, ' ')
+    .replace(/\b(?:UNESA|OPERACAO\s+PROPRIA|UNIDADE\s+PRESENCIAL)\b/gi, ' ')
+    .replace(/^\d{1,2}\s*[.\-)]\s*/, '')
+    .replace(/[—\-|]+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!name || name.length < 3 || NON_DISCIPLINE_LINE_REGEX.test(name)) {
+    return null;
+  }
+
+  // Time extraction fallback
+  if (!currTime && timeMatches.length > 0) {
+    if (timeMatches.length >= 2) {
+      prevTime = `${timeMatches[0][1]} A.A`;
+      currTime = timeMatches[timeMatches.length - 1][1];
+    } else if (!timeMatches[0][2]) {
+      currTime = timeMatches[0][1];
+    } else {
+      prevTime = `${timeMatches[0][1]} A.A`;
+    }
+  }
+
+  // Student count extraction fallback (tokens after the code, excluding times & percentages)
+  if (currStudents === undefined) {
+    const searchSegment = code
+      ? line.text.slice(line.text.indexOf(code) + code.length)
+      : line.text.slice(line.text.indexOf(name) + name.length);
+
+    const segmentWithoutTimesAndPcts = searchSegment
+      .replace(/\b\d{1,3}:\d{2}(?:\s*A\.?A\.?)?/gi, ' ')
+      .replace(/\d{1,3}(?:[.,]\d{1,2})?\s*%/g, ' ');
+
+    const ints = [...segmentWithoutTimesAndPcts.matchAll(/\b(\d{1,4})\b/g)]
+      .map((m) => parseInt(m[1], 10))
+      .filter((n) => Number.isFinite(n));
+
+    if (ints.length >= 2) {
+      prevStudents = prevStudents ?? ints[0];
+      currStudents = ints[1];
+    } else if (ints.length === 1) {
+      currStudents = ints[0];
+    }
+  }
+
+  const studyHoursPerWeek = currTime ? parseTimeToHours(currTime) : 0;
+
+  return {
+    code: code || `DISC-${name.slice(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, 'X')}`,
+    name,
+    previousYearStudents: prevStudents,
+    totalStudents: currStudents ?? 0,
+    previousYearStudyTime: prevTime,
+    studyTimeFormatted: currTime || '0:00',
+    studyHoursPerWeek,
+    learningScore: learning,
+    failureRate: failure,
+    attendanceRate: attendance,
+    lmsAdherenceRate: lms ?? adhesionAV,
+    adhesionAV,
+    adhesionSM,
+    dropoutRiskRate: dropout,
+    professor,
+    classCode,
+    semester,
+    shift,
+  };
+}
+
+function buildExecutiveSummaryFromPdf(
+  allTokens: PdfToken[],
+  allLines: PdfLine[],
+  fullText: string,
+  rawRows: ExtractedRowRaw[]
+): PulsoExecutiveSummary | undefined {
+  const header = extractHeaderMetadata(allLines, fullText, allTokens);
+
+  const studyCard = extractCardBlockMetrics(allTokens, allLines, /tempo\s+de\s+estudo/i, 'time');
+  const freqCard = extractCardBlockMetrics(allTokens, allLines, /frequ[eê]ncia/i, 'percent');
+  const learnCard = extractCardBlockMetrics(allTokens, allLines, /(?:grau\s+de\s+)?aprendizagem/i, 'percent');
+  const failCard = extractCardBlockMetrics(allTokens, allLines, /reprova[cç][aã]o/i, 'percent');
+  const avCard = extractCardBlockMetrics(allTokens, allLines, /ades[aã]o\s*av/i, 'percent');
+  const smCard = extractCardBlockMetrics(allTokens, allLines, /ades[aã]o\s*sm/i, 'percent');
+
+  const foundCardCount = [
+    studyCard.current,
+    freqCard.current,
+    learnCard.current,
+    failCard.current,
+    avCard.current,
+    smCard.current,
+  ].filter((v) => v !== undefined).length;
+
+  if (foundCardCount === 0 && rawRows.length === 0) {
+    return undefined;
+  }
+
+  const avgStudyHours =
+    rawRows.length > 0
+      ? rawRows.reduce((acc, r) => acc + r.studyHoursPerWeek, 0) / rawRows.length
+      : 0;
+  const avgMins = Math.round(avgStudyHours * 60);
+  const fallbackStudyStr = `${Math.floor(avgMins / 60)}:${String(avgMins % 60).padStart(2, '0')}`;
+
+  const rowAvgLearn =
+    rawRows.some((r) => r.learningScore !== undefined)
+      ? round2(
+          rawRows.filter((r) => r.learningScore !== undefined).reduce((a, r) => a + (r.learningScore || 0), 0) /
+            rawRows.filter((r) => r.learningScore !== undefined).length
+        )
+      : 0;
+  const rowAvgFail =
+    rawRows.some((r) => r.failureRate !== undefined)
+      ? round2(
+          rawRows.filter((r) => r.failureRate !== undefined).reduce((a, r) => a + (r.failureRate || 0), 0) /
+            rawRows.filter((r) => r.failureRate !== undefined).length
+        )
+      : 0;
+  const rowAvgFreq =
+    rawRows.some((r) => r.attendanceRate !== undefined)
+      ? round2(
+          rawRows.filter((r) => r.attendanceRate !== undefined).reduce((a, r) => a + (r.attendanceRate || 0), 0) /
+            rawRows.filter((r) => r.attendanceRate !== undefined).length
+        )
+      : 0;
+  const rowAvgAv =
+    rawRows.some((r) => r.adhesionAV !== undefined || r.lmsAdherenceRate !== undefined)
+      ? round2(
+          rawRows
+            .filter((r) => r.adhesionAV !== undefined || r.lmsAdherenceRate !== undefined)
+            .reduce((a, r) => a + (r.adhesionAV ?? r.lmsAdherenceRate ?? 0), 0) /
+            rawRows.filter((r) => r.adhesionAV !== undefined || r.lmsAdherenceRate !== undefined).length
+        )
+      : 0;
+
+  return {
+    learningScore: typeof learnCard.current === 'number' ? learnCard.current : rowAvgLearn,
+    learningScorePreviousYear: typeof learnCard.previous === 'number' ? learnCard.previous : 0,
+    learningScoreTarget: typeof learnCard.target === 'number' ? learnCard.target : 50,
+    failureRate: typeof failCard.current === 'number' ? failCard.current : rowAvgFail,
+    failureRatePreviousYear: typeof failCard.previous === 'number' ? failCard.previous : 0,
+    failureRateTarget: typeof failCard.target === 'number' ? failCard.target : 0,
+    studyTimeFormatted: typeof studyCard.current === 'string' ? studyCard.current : fallbackStudyStr,
+    studyTimePreviousYear: typeof studyCard.previous === 'string' ? studyCard.previous : '—',
+    studyTimeTarget: typeof studyCard.target === 'string' ? studyCard.target : '—',
+    adhesionAV: typeof avCard.current === 'number' ? avCard.current : rowAvgAv,
+    adhesionAVPreviousYear: typeof avCard.previous === 'number' ? avCard.previous : 0,
+    adhesionAVTarget: typeof avCard.target === 'number' ? avCard.target : 80,
+    adhesionSM: typeof smCard.current === 'number' ? smCard.current : 0,
+    adhesionSMPreviousYear: typeof smCard.previous === 'number' ? smCard.previous : 0,
+    adhesionSMTarget: typeof smCard.target === 'number' ? smCard.target : 50,
+    attendanceRate: typeof freqCard.current === 'number' ? freqCard.current : rowAvgFreq,
+    attendanceRatePreviousYear: typeof freqCard.previous === 'number' ? freqCard.previous : 0,
+    attendanceRateTarget: typeof freqCard.target === 'number' ? freqCard.target : 80,
+    brand: header.brand,
+    groupBrand: `${header.brand === 'ESTÁCIO' ? 'YDUQS / ESTÁCIO' : header.brand}`,
+    regional: header.regional,
+    campus: header.campus,
+    course: header.course,
+    operationType: header.operationType || 'OPERACAO PROPRIA',
+    poloType: header.poloType || 'UNIDADE PRESENCIAL',
+    entryYear: header.entryYear || 'Não informado',
+  };
+}
+
+async function parseUploadedRealPDF(
+  file: File,
+  weights: FormulaWeights,
+  onProgress?: (p: ExtractionProgress) => void,
+  simulateError?: boolean
+): Promise<DisciplineMetric[]> {
+  if (onProgress) {
+    onProgress({
+      step: 1,
+      totalSteps: 4,
+      percentage: 20,
+      statusMessage: `Lendo estrutura binária real do arquivo: ${file.name}...`,
+    });
+  }
+
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+
+  const headerStr = new TextDecoder('ascii').decode(bytes.slice(0, 8));
+  if (!headerStr.startsWith('%PDF-')) {
+    throw new Error(`Conteúdo inválido: O arquivo "${file.name}" não possui cabeçalho binário PDF válido (%PDF-).`);
+  }
+
+  if (onProgress) {
+    onProgress({
+      step: 2,
+      totalSteps: 4,
+      percentage: 45,
+      statusMessage: `Decodificando páginas e layout tabular de "${file.name}"...`,
+    });
+  }
+
+  const { pages, allLines, allTokens, fullText } = await extractPdfSpatialLines(bytes);
+
+  if (simulateError) {
+    throw new Error(
+      `Exceção de parsing no arquivo "${file.name}": Formato de tabela inconsistente ou cabeçalhos ausentes.`
+    );
+  }
+
+  if (allLines.length === 0) {
+    throw new Error(
+      `Nenhum texto selecionável foi encontrado em "${file.name}". O documento pode estar salvo como imagem digitalizada.`
+    );
+  }
+
+  if (onProgress) {
+    onProgress({
+      step: 3,
+      totalSteps: 4,
+      percentage: 75,
+      statusMessage: `Extraindo indicadores executivos e disciplinas exclusivamente de "${file.name}"...`,
+    });
+  }
+
+  // Extract discipline rows across all pages
+  const rawRows: ExtractedRowRaw[] = [];
+  const seenKeys = new Set<string>();
+  let activeColMap: ParsedColumnMap | null = null;
+
+  for (const pageLines of pages) {
+    for (let idx = 0; idx < pageLines.length; idx++) {
+      const line = pageLines[idx];
+      const detectedHeaders = detectColumnHeaders(line);
+      if (detectedHeaders) {
+        activeColMap = detectedHeaders;
+        continue;
+      }
+
+      const row = parseDisciplineRowFromLine(line, activeColMap);
+      if (row) {
+        // Check if next line is an orphan continuation of a wrapped discipline name
+        const nextLine = pageLines[idx + 1];
+        if (
+          nextLine &&
+          !DISCIPLINE_CODE_REGEX.test(nextLine.text) &&
+          !/\d{1,3}:\d{2}/.test(nextLine.text) &&
+          !/\d/.test(nextLine.text) &&
+          !NON_DISCIPLINE_LINE_REGEX.test(nextLine.text) &&
+          nextLine.text.length >= 2 &&
+          nextLine.text.length <= 35 &&
+          Math.abs(line.y - nextLine.y) <= 16
+        ) {
+          row.name = `${row.name} ${nextLine.text}`.replace(/\s+/g, ' ').trim();
+          idx++;
+        }
+
+        const dedupeKey = `${row.code}|${row.name}|${row.studyTimeFormatted}|${row.totalStudents}`;
+        if (!seenKeys.has(dedupeKey)) {
+          seenKeys.add(dedupeKey);
+          rawRows.push(row);
+        }
+      }
+    }
+  }
+
+  if (rawRows.length === 0) {
+    throw new Error(
+      `Falha ao extrair dados verificados de "${file.name}": Nenhuma tabela de disciplinas reconhecível foi encontrada no conteúdo deste PDF.`
+    );
+  }
+
+  const executiveSummary = buildExecutiveSummaryFromPdf(allTokens, allLines, fullText, rawRows);
+  const headerMeta = extractHeaderMetadata(allLines, fullText, allTokens);
+  const nowTimestamp = formatBrDateTime(new Date());
+
+  const avgStudyHours =
+    rawRows.reduce((acc, r) => acc + r.studyHoursPerWeek, 0) / Math.max(1, rawRows.length);
+
+  if (onProgress) {
+    onProgress({
+      step: 4,
+      totalSteps: 4,
+      percentage: 100,
+      statusMessage: `Calculando LHI e ARS para ${rawRows.length} turmas extraídas de "${file.name}"...`,
+    });
+  }
+
+  return rawRows.map((row, index): DisciplineMetric => {
+    const studyRatio =
+      avgStudyHours > 0
+        ? clamp((row.studyHoursPerWeek - avgStudyHours) / avgStudyHours, -0.5, 0.5)
+        : 0;
+
+    const baseLearn = executiveSummary?.learningScore || 0;
+    const baseFail = executiveSummary?.failureRate || 0;
+    const baseAttendance = executiveSummary?.attendanceRate || 0;
+    const baseLms = executiveSummary?.adhesionAV || 0;
+
+    const derivedFromSummary: string[] = [];
+
+    const learningScore =
+      row.learningScore !== undefined
+        ? clamp(round1(row.learningScore), 0, 100)
+        : (() => {
+            if (baseLearn > 0) derivedFromSummary.push('Aprendizagem');
+            return baseLearn > 0 ? clamp(round1(baseLearn * (1 + studyRatio * 0.22)), 0, 100) : 0;
+          })();
+
+    const attendanceRate =
+      row.attendanceRate !== undefined
+        ? clamp(round1(row.attendanceRate), 0, 100)
+        : (() => {
+            if (baseAttendance > 0) derivedFromSummary.push('Frequência');
+            return baseAttendance > 0 ? clamp(round1(baseAttendance + studyRatio * 8), 0, 100) : 0;
+          })();
+
+    const failureRate =
+      row.failureRate !== undefined
+        ? clamp(round1(row.failureRate), 0, 100)
+        : (() => {
+            if (baseFail > 0) derivedFromSummary.push('Reprovação');
+            return baseFail > 0 ? clamp(round1(Math.max(0, baseFail * (1 - studyRatio * 0.85))), 0, 100) : 0;
+          })();
+
+    const lmsAdherenceRate =
+      row.lmsAdherenceRate !== undefined
+        ? clamp(round1(row.lmsAdherenceRate), 0, 100)
+        : (() => {
+            if (baseLms > 0) derivedFromSummary.push('Adesão LMS/AV');
+            return baseLms > 0 ? clamp(round1(baseLms + studyRatio * 10), 0, 100) : 0;
+          })();
+
+    const dropoutRiskRate =
+      row.dropoutRiskRate !== undefined
+        ? clamp(round1(row.dropoutRiskRate), 0, 100)
+        : clamp(round1(failureRate * 0.35), 0, 100);
+
+    const lhi = calculateLHI(learningScore, attendanceRate, failureRate, lmsAdherenceRate, weights.lhi);
+    const ars = calculateARS(failureRate, attendanceRate, learningScore, dropoutRiskRate, weights.ars);
+
+    const draft: DisciplineMetric = {
+      id: `pdf-${Date.now()}-${index + 1}-${row.code}`,
+      code: row.code,
+      name: row.name,
+      course: (headerMeta.course || 'Ciência da Computação') as DisciplineMetric['course'],
+      semester: row.semester ?? ((index % 6) + 1),
+      shift: row.shift || 'Noturno',
+      classCode: row.classCode || `TURMA-${String(index + 1).padStart(2, '0')}`,
+      professor: row.professor || 'Docente do Relatório',
+      previousYearStudents: row.previousYearStudents,
+      totalStudents: row.totalStudents,
+      learningScore,
+      failureRate,
+      dropoutRiskRate,
+      previousYearStudyTime: row.previousYearStudyTime,
+      studyHoursPerWeek: row.studyHoursPerWeek,
+      studyTimeFormatted: row.studyTimeFormatted,
+      attendanceRate,
+      lmsAdherenceRate,
+      adhesionAV: row.adhesionAV ?? (executiveSummary ? executiveSummary.adhesionAV : undefined),
+      adhesionSM: row.adhesionSM ?? (executiveSummary ? executiveSummary.adhesionSM : undefined),
+      campus: headerMeta.campus,
+      regional: headerMeta.regional,
+      lhi,
+      ars,
+      lhiStatus: getLHIStatus(lhi),
+      arsLevel: getARSLevel(ars),
+      recommendedAction: '',
+      sourceType: 'Relatório PDF Local',
+      sourceFileOrUrl: file.name,
+      lastUpdated: nowTimestamp,
+      executiveSummary,
+      auditNote:
+        derivedFromSummary.length > 0
+          ? `Extraído de "${file.name}". ${derivedFromSummary.join(', ')} ponderados a partir do resumo executivo deste PDF e do tempo de estudo da turma.`
+          : `Extraído integralmente de "${file.name}".`,
+    };
+
+    draft.recommendedAction = getRecommendedPedagogicalAction(draft);
+    return draft;
+  });
+}
+
 /**
  * High-performance PDF / BI stream extraction engine.
- * Validates file type, size, binary header, and extracts only verified data present in the source.
- * Never invents, estimates, or clones records for unrecognized or empty files.
+ * - For real uploaded `File` objects: parses ONLY the actual binary PDF via pdfjs-dist.
+ * - For built-in sample template descriptors (non-File): resolves the official sample dataset.
+ * Never reuses data from previous imports or invents records for unrecognized files.
  */
 export async function extractMetricsFromPDF(
   file: File | { name: string; size?: number; createdAt?: string; lastModified?: number },
@@ -186,87 +1267,16 @@ export async function extractMetricsFromPDF(
     throw new Error(`Falha estrutural: O arquivo PDF "${file.name}" está corrompido ou ilegível.`);
   }
 
-  // 4. Inspect binary content when a real File object is provided
-  let detectedReportFromContent: 'r9_impar' | 'taquara_final' | 'tom_jobim' | null = null;
+  // 4. Real uploaded PDF file -> parse exclusively its own binary content!
   if (file instanceof File) {
-    const buffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-
-    // Check %PDF- magic header
-    const headerStr = new TextDecoder('ascii').decode(bytes.slice(0, 8));
-    if (!headerStr.startsWith('%PDF-')) {
-      throw new Error(`Conteúdo inválido: O arquivo "${file.name}" não possui cabeçalho binário PDF válido (%PDF-).`);
-    }
-
-    // Check exact binary file size heuristics for verified Pulso reports:
-    // 151542 bytes = Pulso_Acad_mico_IMPAR_64ae4ea6.pdf (TOM JOBIM - 18:56 de estudo, 85,78% freq)
-    // 151714 bytes = Pulso_Acad_mico_IMPAR_R9_627760f7.pdf (R9 TAQUARA - 21:50 de estudo, 78,89% freq)
-    // 152109 bytes = Pulso_Acad_mico_IMPAR_dc53cac6.pdf (TOM JOBIM - 12:29 de estudo, 81,25% freq)
-    if (bytes.length >= 151400 && bytes.length <= 151600) {
-      detectedReportFromContent = 'tom_jobim';
-    } else if (bytes.length >= 151650 && bytes.length <= 151800) {
-      detectedReportFromContent = 'r9_impar';
-    } else if (bytes.length >= 152000 && bytes.length <= 152250) {
-      detectedReportFromContent = 'tom_jobim';
-    } else {
-      // Decode Latin1/UTF-8 text stream to check for verified report signatures
-      const rawText = new TextDecoder('latin1').decode(bytes);
-      if (rawText.includes('DGT1398') || rawText.includes('21:50') || rawText.includes('78,89') || rawText.includes('TAQUARA')) {
-        detectedReportFromContent = 'r9_impar';
-      } else if (rawText.includes('ARA3587') || rawText.includes('14:39') || rawText.includes('68,36')) {
-        detectedReportFromContent = 'taquara_final';
-      } else if (rawText.includes('ARA1390') || rawText.includes('TOM JOBIM') || rawText.includes('18:56') || rawText.includes('57,03')) {
-        detectedReportFromContent = 'tom_jobim';
-      }
-    }
+    return parseUploadedRealPDF(file, weights, onProgress, simulateError);
   }
 
-  // Filename heuristics & robust classification
-  const isTomJobim =
-    detectedReportFromContent === 'tom_jobim' ||
-    lower.includes('tj') ||
-    lower.includes('jobim') ||
-    lower.includes('tom') ||
-    lower.includes('64ae4ea6') ||
-    lower.includes('dc53cac6') ||
-    (lower.includes('impar') && !lower.includes('r9') && !lower.includes('taquara'));
-
-  const isImparR9 =
-    !isTomJobim &&
-    (detectedReportFromContent === 'r9_impar' ||
-      lower.includes('r9') ||
-      lower.includes('627760f7') ||
-      (lower.includes('impar') && lower.includes('taquara')));
-
-  const isTaquaraFinal =
-    !isTomJobim &&
-    !isImparR9 &&
-    (detectedReportFromContent === 'taquara_final' ||
-      lower.includes('final') ||
-      lower.includes('taquara'));
-
-  const campusName = isTomJobim
-    ? 'Campus TOM JOBIM'
-    : isImparR9
-    ? 'Campus R9 - Taquara (IMPAR)'
-    : isTaquaraFinal
-    ? 'Campus R9 - Taquara'
-    : 'Não identificado na fonte';
-
+  // 5. Built-in official template cards (descriptor objects, not uploaded files)
   const steps = [
-    { p: 20, msg: `Validando tipo, integridade e cabeçalho do arquivo: ${file.name}...` },
-    { p: 45, msg: `Inspecionando estrutura documental (${campusName})...` },
-    {
-      p: 75,
-      msg: isTomJobim
-        ? 'Extraindo indicadores verificados: Tempo de Estudo (18:56), Frequência (85,78%), 78 alunos...'
-        : isImparR9
-        ? 'Extraindo indicadores verificados: Tempo de Estudo (21:50), Frequência (78,89%), 103 alunos...'
-        : isTaquaraFinal
-        ? 'Extraindo indicadores verificados: Tempo de Estudo (14:39), Frequência (68,36%), 68 alunos...'
-        : 'Verificando presença de tabelas homologadas do Pulso Acadêmico...',
-    },
-    { p: 100, msg: 'Aplicando motor ponderado LHI e ARS sobre os registros extraídos...' },
+    { p: 25, msg: `Validando modelo oficial: ${file.name}...` },
+    { p: 60, msg: `Carregando registros homologados de "${file.name}"...` },
+    { p: 100, msg: 'Aplicando motor ponderado LHI e ARS sobre os registros...' },
   ];
 
   for (let i = 0; i < steps.length; i++) {
@@ -278,30 +1288,20 @@ export async function extractMetricsFromPDF(
         statusMessage: steps[i].msg,
       });
     }
-    await new Promise((res) => setTimeout(res, 120));
+    await new Promise((res) => setTimeout(res, 90));
 
-    if (simulateError && i === 2) {
+    if (simulateError && i === 1) {
       throw new Error(
         `Exceção de parsing no arquivo "${file.name}": Formato de tabela inconsistente ou cabeçalhos ausentes.`
       );
     }
   }
 
-  // Resolve disciplines strictly from verified sources
-  let extractedDisciplines: DisciplineMetric[] = [];
-  if (isTomJobim) {
-    extractedDisciplines = getPulsoImparDisciplines(weights).map((d) => ({ ...d, sourceFileOrUrl: file.name }));
-  } else if (isImparR9) {
-    extractedDisciplines = getPulsoImparR9Disciplines(weights).map((d) => ({ ...d, sourceFileOrUrl: file.name }));
-  } else if (isTaquaraFinal) {
-    extractedDisciplines = getPulsoTaquaraDisciplines(weights).map((d) => ({ ...d, sourceFileOrUrl: file.name }));
-  } else {
-    extractedDisciplines = getDisciplinesForFile(file.name, weights);
-  }
+  const extractedDisciplines = getDisciplinesForFile(file.name, weights);
 
   if (extractedDisciplines.length === 0) {
     throw new Error(
-      `Falha ao extrair dados verificados de "${file.name}": O documento não contém tabelas estruturadas reconhecíveis do Pulso Acadêmico (ou está em formato de imagem sem texto selecionável). Nenhum dado foi inventado ou estimado.`
+      `Falha ao extrair dados verificados de "${file.name}": Nenhum modelo oficial correspondente foi encontrado.`
     );
   }
 

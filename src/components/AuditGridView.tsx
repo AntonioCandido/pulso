@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
   ArrowUpDown, 
@@ -190,6 +190,15 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
   const [copiedFormula, setCopiedFormula] = useState<boolean>(false);
   const [copiedTacticalPlan, setCopiedTacticalPlan] = useState<boolean>(false);
   const [calcViewMode, setCalcViewMode] = useState<'both' | 'lhi' | 'ars'>('both');
+
+  const currentImportId = disciplines[0]?.importId || 'empty';
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setEditingItem(null);
+    setViewingDetailItem(null);
+    setSelectedCalcDiscipline(null);
+    setAuditNote('');
+  }, [currentImportId, disciplines.length]);
 
   // Risk distribution counts across the current base (filtered by course/search/semester so cards stay contextual)
   const riskCounts = useMemo(() => {
@@ -1147,149 +1156,151 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
 
       {/* MODAL 1: Audit & Inline Review Editor */}
       {editingItem && liveEditPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-lg shadow-xl border border-slate-200 max-w-lg w-full p-6 animate-in fade-in zoom-in duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-              <div>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl border border-slate-200 max-w-lg w-full max-h-[92dvh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+            <div className="flex items-start justify-between gap-3 px-4 sm:px-6 pt-4 sm:pt-5 pb-3 border-b border-slate-200 shrink-0">
+              <div className="min-w-0">
                 <h3 className="text-base font-bold text-slate-900">
                   Auditoria de Indicador: {editingItem.code}
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-500 mt-0.5 truncate">
                   {editingItem.name} ({editingItem.classCode})
                 </p>
               </div>
               <button
                 onClick={() => setEditingItem(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveAuditEdit} className="mt-4 space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Grau de Aprendizagem (%)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="100"
-                    value={editingItem.learningScore}
-                    onChange={(e) =>
-                      setEditingItem({
-                        ...editingItem,
-                        learningScore: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-md bg-slate-50 focus:bg-white focus:outline-[#0A3977] tabular-nums"
-                  />
+            <form onSubmit={handleSaveAuditEdit} className="flex flex-col flex-1 min-h-0 text-xs">
+              <div className="overflow-y-auto flex-1 min-h-0 px-4 sm:px-6 py-4 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Grau de Aprendizagem (%)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      value={editingItem.learningScore}
+                      onChange={(e) =>
+                        setEditingItem({
+                          ...editingItem,
+                          learningScore: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-md bg-slate-50 focus:bg-white focus:outline-[#0A3977] tabular-nums"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Taxa de Reprovação (%)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      value={editingItem.failureRate}
+                      onChange={(e) =>
+                        setEditingItem({
+                          ...editingItem,
+                          failureRate: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-md bg-slate-50 focus:bg-white focus:outline-[#0A3977] tabular-nums"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Frequência Média (%)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      value={editingItem.attendanceRate}
+                      onChange={(e) =>
+                        setEditingItem({
+                          ...editingItem,
+                          attendanceRate: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-md bg-slate-50 focus:bg-white focus:outline-[#0A3977] tabular-nums"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Adesão Plataforma LMS (%)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      value={editingItem.lmsAdherenceRate}
+                      onChange={(e) =>
+                        setEditingItem({
+                          ...editingItem,
+                          lmsAdherenceRate: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-md bg-slate-50 focus:bg-white focus:outline-[#0A3977] tabular-nums"
+                    />
+                  </div>
+                </div>
+
+                {/* Live Preview of Recalculated LHI and ARS */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg bg-slate-50 border border-slate-200">
+                  <div>
+                    <span className="text-[11px] text-slate-500 block">Simulação LHI (Saúde)</span>
+                    <span className={`text-sm font-extrabold tabular-nums ${getLHIHealthTheme(liveEditPreview.lhiStatus, liveEditPreview.lhi).textColor}`}>
+                      {liveEditPreview.lhi.toFixed(1)} · {liveEditPreview.lhiStatus}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-slate-500 block">Simulação ARS (Nível de Risco)</span>
+                    <span className={`text-sm font-extrabold tabular-nums ${getARSRiskTheme(liveEditPreview.arsLevel, liveEditPreview.ars).textColor}`}>
+                      {liveEditPreview.ars.toFixed(1)} · Risco {liveEditPreview.arsLevel}
+                    </span>
+                  </div>
                 </div>
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Taxa de Reprovação (%)
+                    Justificativa da Auditoria / Parecer Pedagógico
                   </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="100"
-                    value={editingItem.failureRate}
-                    onChange={(e) =>
-                      setEditingItem({
-                        ...editingItem,
-                        failureRate: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-md bg-slate-50 focus:bg-white focus:outline-[#0A3977] tabular-nums"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Frequência Média (%)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="100"
-                    value={editingItem.attendanceRate}
-                    onChange={(e) =>
-                      setEditingItem({
-                        ...editingItem,
-                        attendanceRate: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-md bg-slate-50 focus:bg-white focus:outline-[#0A3977] tabular-nums"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Adesão Plataforma LMS (%)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="100"
-                    value={editingItem.lmsAdherenceRate}
-                    onChange={(e) =>
-                      setEditingItem({
-                        ...editingItem,
-                        lmsAdherenceRate: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-md bg-slate-50 focus:bg-white focus:outline-[#0A3977] tabular-nums"
+                  <textarea
+                    rows={2}
+                    required
+                    placeholder="Ex: Revisão de menções pós-recurso discente e inclusão de frequências abonadas."
+                    value={auditNote}
+                    onChange={(e) => setAuditNote(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50 focus:bg-white focus:outline-[#0A3977]"
                   />
                 </div>
               </div>
 
-              {/* Live Preview of Recalculated LHI and ARS */}
-              <div className="grid grid-cols-2 gap-3 p-3 rounded-lg bg-slate-50 border border-slate-200">
-                <div>
-                  <span className="text-[11px] text-slate-500 block">Simulação LHI (Saúde)</span>
-                  <span className={`text-sm font-extrabold tabular-nums ${getLHIHealthTheme(liveEditPreview.lhiStatus, liveEditPreview.lhi).textColor}`}>
-                    {liveEditPreview.lhi.toFixed(1)} · {liveEditPreview.lhiStatus}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[11px] text-slate-500 block">Simulação ARS (Nível de Risco)</span>
-                  <span className={`text-sm font-extrabold tabular-nums ${getARSRiskTheme(liveEditPreview.arsLevel, liveEditPreview.ars).textColor}`}>
-                    {liveEditPreview.ars.toFixed(1)} · Risco {liveEditPreview.arsLevel}
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Justificativa da Auditoria / Parecer Pedagógico
-                </label>
-                <textarea
-                  rows={2}
-                  required
-                  placeholder="Ex: Revisão de menções pós-recurso discente e inclusão de frequências abonadas."
-                  value={auditNote}
-                  onChange={(e) => setAuditNote(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50 focus:bg-white focus:outline-[#0A3977]"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+              <div className="px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-200 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setEditingItem(null)}
-                  className="px-3 py-1.5 font-medium text-slate-600 hover:text-slate-800 cursor-pointer"
+                  className="w-full sm:w-auto px-3 py-2 sm:py-1.5 font-medium text-slate-600 hover:text-slate-800 bg-white sm:bg-transparent border sm:border-0 border-slate-200 rounded-md cursor-pointer text-center"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 font-semibold text-white bg-[#0A3977] hover:bg-blue-800 rounded-md shadow-xs transition-colors cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2 sm:py-1.5 font-semibold text-white bg-[#0A3977] hover:bg-blue-800 rounded-md shadow-xs transition-colors cursor-pointer text-center"
                 >
                   Salvar e Recalcular
                 </button>
@@ -1301,27 +1312,27 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
 
       {/* MODAL 2: Detail Pedagogical Drawer */}
       {viewingDetailItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-2xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 animate-in fade-in zoom-in duration-150 text-xs">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-              <div>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl border border-slate-200 max-w-2xl w-full max-h-[92dvh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-xs">
+            <div className="flex items-start justify-between gap-3 px-4 sm:px-6 pt-4 sm:pt-5 pb-3 border-b border-slate-200 shrink-0">
+              <div className="min-w-0">
                 <h3 className="text-base font-bold text-slate-900">
                   Prontuário Pedagógico de Turma
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-500 mt-0.5 break-words">
                   {viewingDetailItem.name} ({viewingDetailItem.code}) · {viewingDetailItem.classCode}
                 </p>
               </div>
               <button
                 onClick={() => setViewingDetailItem(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="mt-4 space-y-3">
-              <div className="grid grid-cols-2 gap-2.5 p-3.5 bg-slate-50 rounded-lg border border-slate-200">
+            <div className="overflow-y-auto flex-1 min-h-0 px-4 sm:px-6 py-4 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3.5 bg-slate-50 rounded-lg border border-slate-200">
                 <div>
                   <span className="text-slate-500">Curso:</span>
                   <div className="font-semibold text-slate-900">{viewingDetailItem.course}</div>
@@ -1338,7 +1349,7 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                   <span className="text-slate-500">Origem dos Dados:</span>
                   <div className="font-semibold text-slate-900">{viewingDetailItem.sourceType}</div>
                 </div>
-                <div className="col-span-2 pt-1.5 border-t border-slate-200/80">
+                <div className="col-span-1 sm:col-span-2 pt-1.5 border-t border-slate-200/80">
                   <span className="text-slate-500">Arquivo / Fonte de Origem:</span>
                   <div className="font-mono font-semibold text-slate-800 break-all">
                     {viewingDetailItem.sourceFileOrUrl || 'Não informado na fonte'}
@@ -1388,7 +1399,7 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
 
                 return (
                   <>
-                    <div className="grid grid-cols-2 gap-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <div className={`p-3 rounded-lg border ${detailHealth.bgTint} border-slate-200`}>
                         <div className="text-[11px] text-slate-600 font-medium">LHI (Saúde Acadêmica)</div>
                         <div className={`text-base font-extrabold tabular-nums mt-0.5 ${detailHealth.textColor}`}>
@@ -1407,7 +1418,7 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                       <div className="font-bold text-slate-800">
                         Motivo / Justificativa do Nível de Risco (ARS = {viewingDetailItem.ars.toFixed(1)}):
                       </div>
-                      <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-700 tabular-nums">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-700 tabular-nums">
                         <div className="bg-white p-2 rounded border border-slate-200 flex items-center justify-between">
                           <span>Reprovação ({viewingDetailItem.failureRate}%):</span>
                           <strong className="text-slate-900">+{contribFail} pts</strong>
@@ -1578,10 +1589,10 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
               )}
             </div>
 
-            <div className="mt-5 flex justify-end">
+            <div className="px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-200 flex justify-end shrink-0">
               <button
                 onClick={() => setViewingDetailItem(null)}
-                className="px-4 py-1.5 bg-[#0A3977] text-white font-semibold rounded-md hover:bg-blue-800 cursor-pointer"
+                className="w-full sm:w-auto px-4 py-2 sm:py-1.5 bg-[#0A3977] text-white font-semibold rounded-md hover:bg-blue-800 cursor-pointer"
               >
                 Fechar
               </button>
@@ -1704,17 +1715,17 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
         };
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
-            <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-xs">
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-2xl border border-slate-200 max-w-5xl w-full max-h-[92dvh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-xs">
               
               {/* Modal Top Navigation & Header */}
               <div className="px-3.5 sm:px-5 py-2.5 sm:py-3 bg-gradient-to-r from-[#0A3977] via-[#0d478e] to-[#0A3977] text-white flex flex-wrap items-center justify-between gap-2.5 shrink-0">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
                     <Calculator className="w-4 h-4 text-cyan-300" />
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                       <h2 className="text-xs sm:text-sm font-bold text-white tracking-tight">
                         Painel de Verificação de Cálculos (LHI & ARS)
                       </h2>
@@ -1722,21 +1733,21 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                         Transparência Matemática RF04
                       </span>
                     </div>
-                    <p className="text-[10px] sm:text-[11px] text-blue-100/90">
+                    <p className="text-[10px] sm:text-[11px] text-blue-100/90 truncate">
                       Memória descritiva passo a passo com pesos e fatores oficiais do Pulso 2.0
                     </p>
                   </div>
                 </div>
 
                 {/* Right controls: Quick Switcher, Navigation, Copy, Close */}
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto justify-between sm:justify-end">
                   {/* Discipline Quick Selector Dropdown */}
-                  <div className="flex items-center gap-1 bg-white/10 rounded-lg p-0.5 sm:p-1 border border-white/20">
+                  <div className="flex items-center gap-1 bg-white/10 rounded-lg p-0.5 sm:p-1 border border-white/20 flex-1 sm:flex-initial min-w-0">
                     <button
                       type="button"
                       disabled={!hasPrev}
                       onClick={() => hasPrev && setSelectedCalcDiscipline(filteredData[currentIndex - 1])}
-                      className="p-1 hover:bg-white/20 rounded disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                      className="p-1 hover:bg-white/20 rounded disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors shrink-0"
                       title="Disciplina Anterior"
                     >
                       <ChevronLeft className="w-3.5 h-3.5 text-white" />
@@ -1748,7 +1759,7 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                         const target = disciplines.find((d) => d.id === e.target.value);
                         if (target) setSelectedCalcDiscipline(target);
                       }}
-                      className="bg-transparent text-white text-[10px] sm:text-[11px] font-medium py-0.5 px-1 focus:outline-hidden max-w-[180px] sm:max-w-[200px] truncate cursor-pointer [&>option]:text-slate-900"
+                      className="bg-transparent text-white text-[10px] sm:text-[11px] font-medium py-0.5 px-1 focus:outline-hidden flex-1 min-w-0 sm:max-w-[200px] truncate cursor-pointer [&>option]:text-slate-900"
                     >
                       {filteredData.map((d, i) => (
                         <option key={d.id} value={d.id}>
@@ -2657,17 +2668,17 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
               </div>
 
               {/* Modal Footer Controls */}
-              <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
+              <div className="px-4 sm:px-5 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shrink-0">
                 <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>Auditoria transparente em conformidade com o modelo matemático do Pulso Acadêmico 2.0.</span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                   <button
                     type="button"
                     onClick={handleCopyMemory}
-                    className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-semibold rounded-md transition-colors cursor-pointer text-xs flex items-center gap-1.5"
+                    className="w-full sm:w-auto px-3 py-2 sm:py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-semibold rounded-md transition-colors cursor-pointer text-xs flex items-center justify-center gap-1.5"
                   >
                     {copiedFormula ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
                     <span>{copiedFormula ? 'Copiado!' : 'Copiar Memória de Cálculo'}</span>
@@ -2676,7 +2687,7 @@ export const AuditGridView: React.FC<AuditGridViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setSelectedCalcDiscipline(null)}
-                    className="px-4 py-1.5 bg-[#0A3977] text-white font-semibold rounded-md hover:bg-blue-800 transition-colors cursor-pointer text-xs"
+                    className="w-full sm:w-auto px-4 py-2 sm:py-1.5 bg-[#0A3977] text-white font-semibold rounded-md hover:bg-blue-800 transition-colors cursor-pointer text-xs text-center"
                   >
                     Fechar Verificação
                   </button>

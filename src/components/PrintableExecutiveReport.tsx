@@ -484,15 +484,15 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
 
       {/* Modal 1: Salvar como PDF */}
       {showSaveLocationModal && (
-        <div className="no-print fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-xl w-full overflow-hidden">
+        <div className="no-print fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-2xl border border-slate-200 max-w-xl w-full max-h-[92dvh] flex flex-col overflow-hidden">
             {/* Header */}
-            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-emerald-700 text-white">
+            <div className="px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-900 text-white flex items-start sm:items-center justify-between gap-3 border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2 rounded-lg bg-emerald-700 text-white shrink-0">
                   <FolderOpen className="w-5 h-5" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h3 className="text-sm font-bold text-white">
                     Exportação de PDF — Alta Performance
                   </h3>
@@ -503,13 +503,14 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
               </div>
               <button
                 onClick={() => setShowSaveLocationModal(false)}
-                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleConfirmSavePdf} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleConfirmSavePdf} className="flex flex-col flex-1 min-h-0 text-xs">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
               {/* Modalidade de Salvamento */}
               <div>
                 <label className="block font-bold text-slate-800 mb-2">
@@ -590,18 +591,20 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
                 <span className="text-emerald-700 font-semibold">Descarregamento não-bloqueante</span>
               </div>
 
+              </div>
+
               {/* Rodapé */}
-              <div className="pt-2 border-t border-slate-200 flex items-center justify-end gap-2.5">
+              <div className="px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-200 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowSaveLocationModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white sm:bg-slate-100 hover:bg-slate-200 border sm:border-0 border-slate-200 rounded-lg transition-colors cursor-pointer text-center"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-600 rounded-lg transition-colors shadow-xs cursor-pointer"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-600 rounded-lg transition-colors shadow-xs cursor-pointer"
                 >
                   <FileDown className="w-4 h-4" />
                   <span>Iniciar Exportação</span>
@@ -614,15 +617,15 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
 
       {/* Modal 2: Imprimir Relatório */}
       {showPrinterModal && (
-        <div className="no-print fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-xl w-full overflow-hidden">
+        <div className="no-print fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-2xl border border-slate-200 max-w-xl w-full max-h-[92dvh] flex flex-col overflow-hidden">
             {/* Header */}
-            <div className="px-6 py-4 bg-[#0A3977] text-white flex items-center justify-between border-b-2 border-[#FFB800]">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-white/10 text-[#FFB800]">
+            <div className="px-4 sm:px-6 py-3.5 sm:py-4 bg-[#0A3977] text-white flex items-start sm:items-center justify-between gap-3 border-b-2 border-[#FFB800] shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2 rounded-lg bg-white/10 text-[#FFB800] shrink-0">
                   <Printer className="w-5 h-5" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h3 className="text-sm font-bold text-white">
                     Imprimir Relatório — Seletor de Dispositivo
                   </h3>
@@ -633,13 +636,14 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
               </div>
               <button
                 onClick={() => setShowPrinterModal(false)}
-                className="p-1.5 text-blue-200 hover:text-white hover:bg-white/10 rounded-md transition-colors cursor-pointer"
+                className="p-1.5 text-blue-200 hover:text-white hover:bg-white/10 rounded-md transition-colors cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleConfirmPrint} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleConfirmPrint} className="flex flex-col flex-1 min-h-0 text-xs">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
               {/* Lista de Impressoras */}
               <div>
                 <label className="block font-bold text-slate-800 mb-2 flex items-center gap-1.5">
@@ -759,18 +763,20 @@ export const PrintableExecutiveReport: React.FC<PrintableExecutiveReportProps> =
                 </label>
               </div>
 
+              </div>
+
               {/* Rodapé */}
-              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
+              <div className="px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-200 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowPrinterModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white sm:bg-slate-100 hover:bg-slate-200 border sm:border-0 border-slate-200 rounded-lg transition-colors cursor-pointer text-center"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-[#0A3977] hover:bg-[#082d5e] rounded-lg transition-colors shadow-xs cursor-pointer"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2 text-xs font-bold text-white bg-[#0A3977] hover:bg-[#082d5e] rounded-lg transition-colors shadow-xs cursor-pointer"
                 >
                   <Printer className="w-4 h-4 text-[#FFB800]" />
                   <span>Abrir Impressora e Imprimir</span>
