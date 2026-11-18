@@ -72,6 +72,58 @@ export function resolveSourceCreatedAtFallback(
   return null;
 }
 
+const PLACEHOLDER_COURSE_VALUES = new Set([
+  '--',
+  '-',
+  '—',
+  'todos',
+  'todas',
+  'todos os cursos',
+  'selecoes multiplas',
+  '(em branco)',
+  'em branco',
+  'n/a',
+  'na',
+  'nao informado',
+  'nao informado na fonte',
+  'sem curso',
+]);
+
+export function isPlaceholderCourseValue(value?: string | null): boolean {
+  if (!value) return true;
+  const cleaned = value.replace(/[\uE000-\uF8FF]/g, '').replace(/\s+/g, ' ').trim();
+  if (!cleaned) return true;
+  const norm = cleaned
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+  if (!norm || /^[\-—.\s_]+$/.test(norm)) return true;
+  return PLACEHOLDER_COURSE_VALUES.has(norm);
+}
+
+export function resolveDisplayCourseName(
+  activeSession?: ImportSession | null,
+  disciplines?: DisciplineMetric[]
+): string {
+  const hasData = Array.isArray(disciplines) && disciplines.length > 0;
+  if (!hasData) {
+    return !isPlaceholderCourseValue(activeSession?.course)
+      ? activeSession!.course.trim()
+      : '--';
+  }
+
+  const candidates = [
+    activeSession?.course,
+    disciplines[0]?.executiveSummary?.course,
+    ...disciplines.map((d) => d.course),
+  ];
+
+  const valid = candidates.find((c) => !isPlaceholderCourseValue(c));
+  return valid ? valid.trim() : 'Não informado na fonte';
+}
+
+
 function parsePdfDateValue(rawDateStr: string): Date | null {
   if (!rawDateStr) return null;
   const pdfMatch = rawDateStr.match(
@@ -477,7 +529,207 @@ function parseCardText(
   };
 }
 
-function extractHeaderMetadata(allLines: PdfLine[], fullText: string, allTokens?: PdfToken[]): {
+const KNOWN_COURSES: string[] = [
+  'Ciência da Computação',
+  'Sistemas de Informação',
+  'Análise e Desenvolvimento de Sistemas',
+  'Engenharia de Software',
+  'Engenharia da Computação',
+  'Redes de Computadores',
+  'Banco de Dados',
+  'Defesa Cibernética',
+  'Gestão da Tecnologia da Informação',
+  'Jogos Digitais',
+  'Ciência de Dados',
+  'Inteligência Artificial',
+  'Segurança da Informação',
+  'Computação em Nuvem',
+  'Engenharia Civil',
+  'Engenharia Elétrica',
+  'Engenharia Mecânica',
+  'Engenharia de Produção',
+  'Arquitetura e Urbanismo',
+  'Administração',
+  'Ciências Contábeis',
+  'Ciências Econômicas',
+  'Direito',
+  'Enfermagem',
+  'Psicologia',
+  'Pedagogia',
+  'Biomedicina',
+  'Fisioterapia',
+  'Nutrição',
+  'Educação Física',
+  'Farmácia',
+  'Odontologia',
+  'Medicina',
+  'Medicina Veterinária',
+  'Marketing',
+  'Logística',
+  'Recursos Humanos',
+  'Gestão Comercial',
+  'Gestão Financeira',
+  'Gestão Pública',
+  'Publicidade e Propaganda',
+  'Jornalismo',
+  'Design Gráfico',
+];
+
+const PT_BR_MINOR_WORDS = new Set(['da', 'de', 'do', 'das', 'dos', 'e', 'em', 'para', 'com']);
+
+function cleanPdfSlicerText(raw: string): string {
+  return raw
+    .replace(/[\uE000-\uF8FF]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[:|\-\s]+|[:|\s]+$/g, '')
+    .trim();
+}
+
+function formatCourseNamePreservingCase(raw: string): string {
+  const cleaned = cleanPdfSlicerText(raw);
+  if (!cleaned) return '';
+  // If mostly uppercase (e.g. Power BI slicer "SISTEMAS DE INFORMACAO"), format cleanly to Title Case
+  const letters = cleaned.replace(/[^A-Za-zÀ-Úà-ú]/g, '');
+  const upperLetters = cleaned.replace(/[^A-ZÀ-Ú]/g, '');
+  if (letters.length > 0 && upperLetters.length / letters.length >= 0.75) {
+    return cleaned
+      .toLowerCase()
+      .split(/\s+/)
+      .map((word, idx) => {
+        if (idx > 0 && PT_BR_MINOR_WORDS.has(word)) return word;
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      })
+      .join(' ');
+  }
+  return cleaned;
+}
+
+function matchKnownCourse(rawText: string): string | null {
+  const cleaned = cleanPdfSlicerText(rawText);
+  if (!cleaned || isPlaceholderCourseValue(cleaned)) return null;
+
+  const normRaw = normalizeForMatch(cleaned);
+  // 1. Exact or full substring match (prefer longest course name to avoid partial ambiguity)
+  const sortedByLen = [...KNOWN_COURSES].sort((a, b) => b.length - a.length);
+  const fullMatch = sortedByLen.find((c) => normRaw.includes(normalizeForMatch(c)));
+  if (fullMatch) return fullMatch;
+
+  // 2. Truncated Power BI slicer prefix match (e.g. "CIENCIA DA COM…", "ANALISE E DESE…", "SISTEMAS DE IN…")
+  const hasEllipsis = /(?:…|\.{2,})$/.test(cleaned);
+  const withoutEllipsis = normRaw.replace(/(?:…|\.{2,})+$/g, '').trim();
+  if (withoutEllipsis.length >= 6) {
+    const prefixMatches = KNOWN_COURSES.filter((c) =>
+      normalizeForMatch(c).startsWith(withoutEllipsis)
+    );
+    if (prefixMatches.length === 1) {
+      return prefixMatches[0];
+    }
+  }
+
+  // Also handle common abbreviated forms like "Analise e Desenv. de Sistemas"
+  if (
+    hasEllipsis &&
+    withoutEllipsis.includes('analise e desenv')
+  ) {
+    return 'Análise e Desenvolvimento de Sistemas';
+  }
+  if (
+    hasEllipsis &&
+    withoutEllipsis.includes('gestao da tec')
+  ) {
+    return 'Gestão da Tecnologia da Informação';
+  }
+
+  return null;
+}
+
+const SLICER_STOP_LABEL_REGEX = /^(?:campus(?:\s*polo)?|curso|regional|marca|grupo\s*marca|safra|turma|modalidade(?:\s*aluno)?|socioemoc(?:ial)?|onboarding|[aá]rea[_\s]*hub|tipo\s*(?:opera[cç][aã]o|polo)|ano\s*(?:de\s*)?entrada|unidade):?$/i;
+
+function isTableHeaderRowToken(tok: PdfToken, page1Tokens: PdfToken[]): boolean {
+  const sameRow = page1Tokens.filter((t) => Math.abs(t.y - tok.y) <= 6);
+  const rowText = normalizeForMatch(sameRow.map((t) => t.str).join(' '));
+  return (
+    (rowText.includes('disciplina') && (rowText.includes('turma') || rowText.includes('curso') || rowText.includes('codigo') || rowText.includes('tempo'))) ||
+    (rowText.includes('regional') && rowText.includes('campus') && rowText.includes('curso'))
+  );
+}
+
+function extractSlicerValueFromTokens(
+  page1Tokens: PdfToken[],
+  labelRegex: RegExp,
+  tableLeftX?: number
+): string {
+  const candidates = page1Tokens
+    .filter((t) => labelRegex.test(cleanPdfSlicerText(t.str)) && !isTableHeaderRowToken(t, page1Tokens))
+    .sort((a, b) => {
+      const aSidebar = a.x < 140 ? 0 : 1;
+      const bSidebar = b.x < 140 ? 0 : 1;
+      if (aSidebar !== bSidebar) return aSidebar - bSidebar;
+      return b.y - a.y || a.x - b.x;
+    });
+
+  for (const labelTok of candidates) {
+    const isLeftSidebar = labelTok.x < 140;
+    const maxRightX = isLeftSidebar
+      ? Math.min(136, tableLeftX !== undefined ? tableLeftX - 8 : 136)
+      : labelTok.x + 185;
+
+    // 1. Check vertically directly underneath the slicer header
+    const belowTokens = page1Tokens
+      .filter(
+        (t) =>
+          t !== labelTok &&
+          t.x >= labelTok.x - 12 &&
+          t.x <= maxRightX &&
+          t.y < labelTok.y - 3 &&
+          t.y >= labelTok.y - 42
+      )
+      .sort((a, b) => b.y - a.y || a.x - b.x);
+
+    const cleanBelow = belowTokens.filter((t) => {
+      const txt = cleanPdfSlicerText(t.str);
+      return txt.length > 0 && !SLICER_STOP_LABEL_REGEX.test(txt);
+    });
+
+    if (cleanBelow.length > 0) {
+      const firstRowY = cleanBelow[0].y;
+      const rowStr = cleanBelow
+        .filter((t) => Math.abs(t.y - firstRowY) <= 5)
+        .sort((a, b) => a.x - b.x)
+        .map((t) => cleanPdfSlicerText(t.str))
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+      if (rowStr) return rowStr;
+    }
+
+    // 2. Fallback: inline value immediately to the right of the label on the same row
+    const rightRowStr = page1Tokens
+      .filter(
+        (t) =>
+          t !== labelTok &&
+          Math.abs(t.y - labelTok.y) <= 6 &&
+          t.x > labelTok.x + 2 &&
+          t.x <= labelTok.x + 240 &&
+          (!isLeftSidebar || t.x <= maxRightX)
+      )
+      .sort((a, b) => a.x - b.x)
+      .map((t) => cleanPdfSlicerText(t.str))
+      .filter((txt) => txt.length > 0 && !SLICER_STOP_LABEL_REGEX.test(txt))
+      .join(' ')
+      .trim();
+    if (rightRowStr) return rightRowStr;
+  }
+
+  return '';
+}
+
+function extractHeaderMetadata(
+  allLines: PdfLine[],
+  fullText: string,
+  allTokens?: PdfToken[],
+  tableLeftX?: number
+): {
   campus: string;
   course: string;
   brand: string;
@@ -488,18 +740,36 @@ function extractHeaderMetadata(allLines: PdfLine[], fullText: string, allTokens?
 } {
   const headerLines = allLines.slice(0, 45);
   const headerText = headerLines.map((l) => l.text).join('\n');
+  const page1Tokens = (allTokens || []).filter((t) => t.page === 1);
 
+  // 1. Campus extraction: spatial slicer first ("Campus Polo" / "Campus" / "Unidade")
   let campus = '';
-  for (let i = 0; i < headerLines.length; i++) {
-    const t = headerLines[i].text;
-    const m = t.match(/(?:Campus\s*(?:Polo)?|Unidade)\s*[:\-]\s*([A-ZÀ-Ú0-9][A-ZÀ-Úa-zà-ú0-9\s\-–\/]{1,42})/i);
-    if (m) {
-      campus = m[1].split(/\s{2,}|Curso|Modalidade|Regional|Operaç|Tipo/i)[0].trim();
-      break;
+  if (page1Tokens.length > 0) {
+    const rawCampusSlicer = extractSlicerValueFromTokens(
+      page1Tokens,
+      /^(?:campus\s*polo|campus|unidade):?$/i,
+      tableLeftX
+    );
+    if (rawCampusSlicer && !isPlaceholderCourseValue(rawCampusSlicer)) {
+      campus = rawCampusSlicer;
     }
-    if (/^(?:Campus\s*(?:Polo)?|Campus|Unidade)$/i.test(t) && headerLines[i + 1]) {
-      campus = headerLines[i + 1].text.trim();
-      break;
+  }
+
+  if (!campus) {
+    for (let i = 0; i < headerLines.length; i++) {
+      const t = headerLines[i].text;
+      const m = t.match(/(?:Campus\s*(?:Polo)?|Unidade)\s*[:\-]\s*([A-ZÀ-Ú0-9][A-ZÀ-Úa-zà-ú0-9\s\-–\/]{1,42})/i);
+      if (m) {
+        campus = m[1].split(/\s{2,}|Curso|Modalidade|Regional|Operaç|Tipo/i)[0].trim();
+        break;
+      }
+      if (/^(?:Campus\s*(?:Polo)?|Campus|Unidade)$/i.test(t) && headerLines[i + 1]) {
+        const nextTxt = cleanPdfSlicerText(headerLines[i + 1].text);
+        if (nextTxt && !SLICER_STOP_LABEL_REGEX.test(nextTxt)) {
+          campus = nextTxt;
+          break;
+        }
+      }
     }
   }
 
@@ -510,75 +780,88 @@ function extractHeaderMetadata(allLines: PdfLine[], fullText: string, allTokens?
     }
   }
 
-  const knownCourses = [
-    'Ciência da Computação',
-    'Sistemas de Informação',
-    'Análise e Desenvolvimento de Sistemas',
-    'Engenharia de Software',
-    'Engenharia da Computação',
-    'Redes de Computadores',
-    'Banco de Dados',
-    'Defesa Cibernética',
-    'Gestão da Tecnologia da Informação',
-    'Jogos Digitais',
-  ];
-
+  // 2. Course extraction:
+  // Step 2a: Spatial lookup around a "Curso" slicer label on Page 1 (strictly avoiding table column header "CURSO")
   let course = '';
-  // 1. Spatial lookup around a "Curso" slicer label on Page 1
-  if (allTokens && allTokens.length > 0) {
-    const cursoTok = allTokens.find(
-      (t) => t.page === 1 && /^curso:?$/i.test(t.str.trim())
+  if (page1Tokens.length > 0) {
+    const rawSlicerCourse = extractSlicerValueFromTokens(
+      page1Tokens,
+      /^curso:?$/i,
+      tableLeftX
     );
-    if (cursoTok) {
-      const nearby = allTokens
+    if (rawSlicerCourse && !isPlaceholderCourseValue(rawSlicerCourse)) {
+      course = matchKnownCourse(rawSlicerCourse) || formatCourseNamePreservingCase(rawSlicerCourse);
+    }
+  }
+
+  // Step 2b: Line-based explicit "Curso: ..." or standalone "Curso" header line
+  if (!course) {
+    for (let i = 0; i < allLines.length; i++) {
+      const t = allLines[i].text;
+      const m = t.match(/\bCurso\s*[:\-]\s*([A-ZÀ-Úa-zà-ú0-9\s\-–\/…\.]{3,60})/i);
+      if (m) {
+        const candidate = cleanPdfSlicerText(
+          m[1].split(/\s{2,}|Modalidade|Campus|Entrada|Ano|Regional|Safra|Turma/i)[0]
+        );
+        if (candidate && !isPlaceholderCourseValue(candidate) && !SLICER_STOP_LABEL_REGEX.test(candidate)) {
+          course = matchKnownCourse(candidate) || formatCourseNamePreservingCase(candidate);
+          break;
+        }
+      }
+      if (/^Curso$/i.test(cleanPdfSlicerText(t)) && allLines[i + 1]) {
+        const nextLineCand = cleanPdfSlicerText(allLines[i + 1].text);
+        if (
+          nextLineCand &&
+          !isPlaceholderCourseValue(nextLineCand) &&
+          !SLICER_STOP_LABEL_REGEX.test(nextLineCand) &&
+          !DISCIPLINE_CODE_REGEX.test(nextLineCand)
+        ) {
+          course = matchKnownCourse(nextLineCand) || formatCourseNamePreservingCase(nextLineCand);
+          break;
+        }
+      }
+    }
+  }
+
+  // Step 2c: Bottom matrix / table column named "CURSO" (when slicer says "Todos" or rows exist below)
+  if (!course && allTokens && allTokens.length > 0) {
+    const cursoColHeaders = allTokens.filter(
+      (t) => /^curso$/i.test(cleanPdfSlicerText(t.str)) && isTableHeaderRowToken(t, allTokens.filter((x) => x.page === t.page))
+    );
+    for (const hdr of cursoColHeaders) {
+      const samePage = allTokens.filter((t) => t.page === hdr.page);
+      const colVals = samePage
         .filter(
           (t) =>
-            t.page === 1 &&
-            t.x >= cursoTok.x - 30 &&
-            t.x <= cursoTok.x + 180 &&
-            t.y <= cursoTok.y + 8 &&
-            t.y >= cursoTok.y - 38 &&
-            !/^curso:?$/i.test(t.str.trim())
+            t.y < hdr.y - 6 &&
+            Math.abs(t.x + t.w / 2 - (hdr.x + hdr.w / 2)) <= 65 &&
+            !isPlaceholderCourseValue(t.str) &&
+            !SLICER_STOP_LABEL_REGEX.test(cleanPdfSlicerText(t.str))
         )
-        .sort((a, b) => b.y - a.y || a.x - b.x)
-        .map((t) => t.str)
-        .join(' ');
-      const normNearby = normalizeForMatch(nearby);
-      const matchedNearby = knownCourses.find((c) => normNearby.includes(normalizeForMatch(c)));
-      if (matchedNearby) {
-        course = matchedNearby;
+        .sort((a, b) => b.y - a.y || a.x - b.x);
+      if (colVals.length > 0) {
+        const rawCol = cleanPdfSlicerText(colVals[0].str);
+        if (rawCol && !isPlaceholderCourseValue(rawCol)) {
+          course = matchKnownCourse(rawCol) || formatCourseNamePreservingCase(rawCol);
+          break;
+        }
       }
     }
   }
 
-  // 2. Line-based explicit "Curso: ..."
-  if (!course) {
-    for (let i = 0; i < headerLines.length; i++) {
-      const t = headerLines[i].text;
-      const m = t.match(/Curso\s*[:\-]\s*([A-ZÀ-Úa-zà-ú0-9\s\-–\/]{3,55})/i);
-      if (m) {
-        const candidate = m[1].split(/\s{2,}|Modalidade|Campus|Entrada|Ano|Regional/i)[0].trim();
-        const normCand = normalizeForMatch(candidate);
-        const matched = knownCourses.find((c) => normCand.includes(normalizeForMatch(c)));
-        course = matched || candidate;
-        break;
-      }
-    }
-  }
-
-  // 3. Fallback: search only non-table lines (never match inside discipline names like "FUNDAMENTOS DE REDES DE COMPUTADORES")
+  // Step 2d: Fallback across non-table lines (never match inside discipline names)
   if (!course) {
     const nonTableLinesText = allLines
       .filter(
         (l) =>
           !DISCIPLINE_CODE_REGEX.test(l.text) &&
           !/\b\d{1,3}:\d{2}\b/.test(l.text) &&
-          !/\b(fundamentos|protocolos|introducao|gerenciamento)\b/i.test(l.text)
+          !/\b(fundamentos|protocolos|introducao|gerenciamento)\b/i.test(l.text) &&
+          !/disciplina/i.test(l.text)
       )
       .map((l) => l.text)
       .join('\n');
-    const normNonTable = normalizeForMatch(nonTableLinesText);
-    const matched = knownCourses.find((c) => normNonTable.includes(normalizeForMatch(c)));
+    const matched = matchKnownCourse(nonTableLinesText);
     if (matched) course = matched;
   }
 
@@ -590,8 +873,13 @@ function extractHeaderMetadata(allLines: PdfLine[], fullText: string, allTokens?
     ? 'YDUQS'
     : 'ESTÁCIO';
 
+  const regionalSlicer = page1Tokens.length > 0
+    ? extractSlicerValueFromTokens(page1Tokens, /^regional:?$/i, tableLeftX)
+    : '';
   const regionalMatch = fullText.match(/Regional\s*[:\-]?\s*([A-Z0-9]{2,15})/i);
-  const regional = regionalMatch ? regionalMatch[1].toUpperCase() : 'UNESA';
+  const regional =
+    (regionalSlicer && !isPlaceholderCourseValue(regionalSlicer) ? regionalSlicer.toUpperCase() : '') ||
+    (regionalMatch ? regionalMatch[1].toUpperCase() : 'UNESA');
 
   const entryMatch = fullText.match(/Ano\s*(?:de\s*)?Entrada\s*[:\-]?\s*([\d\sa]{1,12})/i);
   const entryYear = entryMatch ? entryMatch[1].trim() : undefined;
@@ -608,7 +896,7 @@ function extractHeaderMetadata(allLines: PdfLine[], fullText: string, allTokens?
 
   return {
     campus: campus || 'Unidade do Relatório',
-    course: course || 'Ciência da Computação',
+    course: course || 'Não informado na fonte',
     brand,
     regional,
     entryYear,
@@ -927,9 +1215,10 @@ function buildExecutiveSummaryFromPdf(
   allTokens: PdfToken[],
   allLines: PdfLine[],
   fullText: string,
-  rawRows: ExtractedRowRaw[]
+  rawRows: ExtractedRowRaw[],
+  headerMeta?: ReturnType<typeof extractHeaderMetadata>
 ): PulsoExecutiveSummary | undefined {
-  const header = extractHeaderMetadata(allLines, fullText, allTokens);
+  const header = headerMeta || extractHeaderMetadata(allLines, fullText, allTokens);
 
   const studyCard = extractCardBlockMetrics(allTokens, allLines, /tempo\s+de\s+estudo/i, 'time');
   const freqCard = extractCardBlockMetrics(allTokens, allLines, /frequ[eê]ncia/i, 'percent');
@@ -1121,8 +1410,8 @@ async function parseUploadedRealPDF(
     );
   }
 
-  const executiveSummary = buildExecutiveSummaryFromPdf(allTokens, allLines, fullText, rawRows);
-  const headerMeta = extractHeaderMetadata(allLines, fullText, allTokens);
+  const headerMeta = extractHeaderMetadata(allLines, fullText, allTokens, activeColMap?.tableLeftX);
+  const executiveSummary = buildExecutiveSummaryFromPdf(allTokens, allLines, fullText, rawRows, headerMeta);
   const nowTimestamp = formatBrDateTime(new Date());
 
   const avgStudyHours =
@@ -1194,7 +1483,7 @@ async function parseUploadedRealPDF(
       id: `pdf-${Date.now()}-${index + 1}-${row.code}`,
       code: row.code,
       name: row.name,
-      course: (headerMeta.course || 'Ciência da Computação') as DisciplineMetric['course'],
+      course: (headerMeta.course || 'Não informado na fonte') as DisciplineMetric['course'],
       semester: row.semester ?? ((index % 6) + 1),
       shift: row.shift || 'Noturno',
       classCode: row.classCode || `TURMA-${String(index + 1).padStart(2, '0')}`,

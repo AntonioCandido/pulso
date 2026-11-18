@@ -18,12 +18,11 @@ import {
   Check,
   Server,
   Trash2,
-  RotateCcw,
   X
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { DisciplineMetric, FormulaWeights, SystemConfig, PowerBIConnectionConfig, AcademicCourse, ImportSession } from '../types';
-import { extractMetricsFromPDF, ExtractionProgress, extractFileCreationInfo, formatBrDateTime, resolveKnownReportCreatedAt } from '../utils/pdfParser';
+import { extractMetricsFromPDF, ExtractionProgress, extractFileCreationInfo, formatBrDateTime, resolveKnownReportCreatedAt, resolveDisplayCourseName } from '../utils/pdfParser';
 import { USER_POWERBI_URL, getPowerBiSynchronizedData } from '../data/mockAcademicData';
 import { calculateLHI, calculateARS, getLHIStatus, getARSLevel, getRecommendedPedagogicalAction } from '../utils/calculations';
 
@@ -34,10 +33,11 @@ interface IngestionViewProps {
   onClearAllImportedData: () => void;
   config: SystemConfig;
   onUpdateConfig: (newConfig: SystemConfig) => void;
+  onNavigateToDashboard?: () => void;
 }
 
 interface SourceDeletionModalData {
-  type: 'pdf' | 'powerbi' | 'template';
+  type: 'pdf' | 'powerbi';
   identifier: string;
   displayName: string;
   associatedCount: number;
@@ -57,41 +57,6 @@ interface PendingImportData {
   sessionMeta: ImportSession;
 }
 
-export const AVAILABLE_SAMPLE_REPORTS: PDFDocumentItem[] = [
-  {
-    fileName: 'Pulso Acadêmico IMPAR_TJ.pdf',
-    description: 'Relatório Oficial Campus TOM JOBIM · 18:56 de estudo, 85,78% freq, 78 alunos (Ciência da Computação)',
-    recordCount: 15,
-    fileSize: '148 KB',
-    uploadedDate: '2026-10-29',
-    createdAt: '29/10/2026 06:20',
-  },
-  {
-    fileName: 'Pulso Acadêmico IMPAR R9.pdf',
-    description: 'Relatório Oficial Campus R9 - Taquara · 21:50 de estudo, 78,89% freq, 103 alunos (Ciência da Computação)',
-    recordCount: 15,
-    fileSize: '245 KB',
-    uploadedDate: '2026-10-29',
-    createdAt: '29/10/2026 07:20',
-  },
-  {
-    fileName: 'Pulso Acadêmico - Taquara (Final).pdf',
-    description: 'Relatório Oficial Campus R9 - Taquara · 14:39 de estudo, 68,36% freq, 68 alunos (Ciência da Computação)',
-    recordCount: 15,
-    fileSize: '184 KB',
-    uploadedDate: '2026-10-20',
-    createdAt: '20/10/2026 16:38',
-  },
-  {
-    fileName: 'Pulso Acadêmico TOM JOBIM.pdf',
-    description: 'Relatório Oficial Campus TOM JOBIM · 18:56 de estudo, 85,78% freq, 78 alunos (Ciência da Computação)',
-    recordCount: 15,
-    fileSize: '312 KB',
-    uploadedDate: '2026-10-15',
-    createdAt: '15/10/2026 09:00',
-  },
-];
-
 export const IngestionView: React.FC<IngestionViewProps> = ({
   disciplines,
   activeSession,
@@ -99,6 +64,7 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
   onClearAllImportedData,
   config,
   onUpdateConfig,
+  onNavigateToDashboard,
 }) => {
   const [activeTab, setActiveTab] = useState<'powerbi' | 'pdf'>('powerbi');
 
@@ -157,24 +123,6 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
       ]);
     }
   }, [activeSession?.importId, disciplines.length]);
-
-  // Sample / Template Reports List state - allows deleting models with persistence
-  const [sampleReports, setSampleReports] = useState<PDFDocumentItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('pulso_sample_reports_v2');
-      if (saved !== null) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.some((p: any) => p.fileName.includes('IMPAR_TJ'))) return parsed;
-      }
-    } catch (e) {}
-    return AVAILABLE_SAMPLE_REPORTS;
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('pulso_sample_reports_v2', JSON.stringify(sampleReports));
-    } catch (e) {}
-  }, [sampleReports]);
 
   // PDF Extraction states
   const [isExtracting, setIsExtracting] = useState(false);
@@ -523,7 +471,7 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
           (newItems.reduce((acc, c) => acc + c.attendanceRate, 0) / newItems.length).toFixed(2)
         );
         const firstCampus = newItems[0]?.campus || 'Não informado na fonte';
-        const firstCourse = newItems[0]?.course || 'Não informado na fonte';
+        const firstCourse = resolveDisplayCourseName(null, newItems);
 
         const sheetCreatedRaw = workbook.Props?.CreatedDate ? new Date(workbook.Props.CreatedDate) : null;
         const hasSheetCreated = sheetCreatedRaw instanceof Date && !Number.isNaN(sheetCreatedRaw.getTime());
@@ -548,7 +496,7 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
           totalRecords: newItems.length,
           totalStudents: newItems.reduce((acc, curr) => acc + curr.totalStudents, 0),
           campus: firstCampus,
-          course: firstCourse,
+          course: firstCourse === '--' ? 'Não informado na fonte' : firstCourse,
           studyTimeFormatted: avgStudyFormatted,
           attendanceRate: avgAttendance,
         };
@@ -603,6 +551,7 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
 
       const exec = extracted[0]?.executiveSummary;
       const totalStudents = extracted.reduce((acc, curr) => acc + curr.totalStudents, 0);
+      const resolvedCourse = resolveDisplayCourseName(null, extracted);
 
       const sessionMeta: ImportSession = {
         importId: `import_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -616,7 +565,7 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
         totalRecords: extracted.length,
         totalStudents,
         campus: exec?.campus || extracted[0]?.campus || 'Unidade do Relatório',
-        course: exec?.course || extracted[0]?.course || 'Ciência da Computação',
+        course: resolvedCourse === '--' ? 'Não informado na fonte' : resolvedCourse,
         studyTimeFormatted: exec?.studyTimeFormatted || (extracted[0]?.studyTimeFormatted ? extracted[0].studyTimeFormatted : '00:00'),
         attendanceRate: exec?.attendanceRate ?? (extracted.length > 0 ? Number((extracted.reduce((acc, c) => acc + c.attendanceRate, 0) / extracted.length).toFixed(2)) : 0),
       };
@@ -675,13 +624,15 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
     ]);
 
     setLastExtractedCount(confirmedCount);
-    setActionNotice(`Importação confirmada! O arquivo "${pendingImport.sessionMeta.fileName}" (${pendingImport.sessionMeta.campus}) substituiu integralmente a base anterior.`);
+    setActionNotice(
+      `Importação confirmada! O arquivo "${pendingImport.sessionMeta.fileName}" (${pendingImport.sessionMeta.course} · ${pendingImport.sessionMeta.campus}) substituiu integralmente a base anterior.`
+    );
     setShowConfirmImportModal(false);
     setPendingImport(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-    setTimeout(() => setActionNotice(null), 5000);
+    setTimeout(() => setActionNotice(null), 8000);
   };
 
   // Cancel pending import without altering any state
@@ -706,27 +657,6 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
     setRemoveAssociatedDisciplines(true);
   };
 
-  const handlePromptDeleteSample = (sample: PDFDocumentItem) => {
-    const count = disciplines.filter(
-      (d) =>
-        d.sourceFileOrUrl.toLowerCase().includes(sample.fileName.toLowerCase()) ||
-        activeSession?.fileName === sample.fileName
-    ).length;
-    setItemToDelete({
-      type: 'template',
-      identifier: sample.fileName,
-      displayName: sample.fileName,
-      associatedCount: count,
-    });
-    setRemoveAssociatedDisciplines(true);
-  };
-
-  const handleRestoreSampleReports = () => {
-    setSampleReports(AVAILABLE_SAMPLE_REPORTS);
-    setActionNotice('Modelos oficiais de relatórios restaurados com sucesso.');
-    setTimeout(() => setActionNotice(null), 4000);
-  };
-
   const handlePromptDeleteBi = (conn: PowerBIConnectionConfig) => {
     const count = disciplines.filter((d) => d.sourceFileOrUrl === conn.reportUrl).length;
     setItemToDelete({
@@ -747,13 +677,6 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
         onClearAllImportedData();
       }
       setActionNotice(`Fonte PDF "${itemToDelete.displayName}" removida com sucesso.`);
-    } else if (itemToDelete.type === 'template') {
-      setSampleReports((prev: PDFDocumentItem[]) => prev.filter((s: PDFDocumentItem) => s.fileName !== itemToDelete.identifier));
-      setPdfDocuments((prev: PDFDocumentItem[]) => prev.filter((d: PDFDocumentItem) => d.fileName !== itemToDelete.identifier));
-      if (removeAssociatedDisciplines && itemToDelete.associatedCount > 0) {
-        onClearAllImportedData();
-      }
-      setActionNotice(`Modelo "${itemToDelete.displayName}" excluído com sucesso.`);
     } else {
       const updatedConns = config.biConnections.filter((c) => c.reportUrl !== itemToDelete.identifier);
       onUpdateConfig({
@@ -876,14 +799,26 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
 
       {/* Global Action Notice */}
       {actionNotice && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md text-xs font-semibold flex items-center justify-between animate-in fade-in">
-          <div className="flex items-center gap-2">
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md text-xs font-semibold flex flex-wrap items-center justify-between gap-2 animate-in fade-in">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{actionNotice}</span>
           </div>
-          <button onClick={() => setActionNotice(null)} className="text-emerald-700 hover:text-emerald-900">
-            <X className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {onNavigateToDashboard && disciplines.length > 0 && (
+              <button
+                type="button"
+                onClick={onNavigateToDashboard}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-[11px] font-bold transition-colors cursor-pointer"
+              >
+                <span>Ver Dashboard</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            )}
+            <button onClick={() => setActionNotice(null)} className="text-emerald-700 hover:text-emerald-900 cursor-pointer">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -1348,8 +1283,6 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
                             const cachedFile = uploadedFilesMapRef.current.get(doc.fileName);
                             if (cachedFile) {
                               handleStageAndValidatePDF(cachedFile);
-                            } else if (AVAILABLE_SAMPLE_REPORTS.some((s) => s.fileName === doc.fileName)) {
-                              handleStageAndValidatePDF({ name: doc.fileName, createdAt: doc.createdAt });
                             } else {
                               fileInputRef.current?.click();
                             }
@@ -1381,129 +1314,10 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
             </div>
           )}
 
-          {/* Official Templates for Regression Testing & Coordinator Quick Test */}
-          <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">
-                  Modelos Oficiais de Relatórios YDUQS / ESTÁCIO (Para Teste & Validação da Substituição)
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Utilize os relatórios oficiais abaixo para alternar arquivos e validar que a substituição é 100% atômica, sem combinação de dados.
-                </p>
-              </div>
-
-              {sampleReports.length < AVAILABLE_SAMPLE_REPORTS.length && (
-                <button
-                  onClick={handleRestoreSampleReports}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-md transition-colors shrink-0 cursor-pointer"
-                  title="Restaurar todos os modelos oficiais padrão"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Restaurar Modelos Padrão</span>
-                </button>
-              )}
-            </div>
-
-            {sampleReports.length === 0 ? (
-              <div className="p-6 text-center bg-slate-50 rounded-lg border border-dashed border-slate-300 space-y-2">
-                <p className="text-xs font-medium text-slate-600">
-                  Todos os modelos de relatório foram excluídos.
-                </p>
-                <button
-                  onClick={handleRestoreSampleReports}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md transition-colors cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Restaurar Modelos Oficiais</span>
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
-                {sampleReports.map((sample) => {
-                  const isCurrentlyActive = disciplines.length > 0 && (
-                    activeSession?.fileName === sample.fileName ||
-                    disciplines.some((d) => d.sourceFileOrUrl === sample.fileName)
-                  );
-
-                  return (
-                    <div
-                      key={sample.fileName}
-                      className={`p-3.5 rounded-lg border flex flex-col justify-between transition-colors ${
-                        isCurrentlyActive
-                          ? 'border-blue-400 bg-blue-50/50 shadow-xs'
-                          : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100/60'
-                      }`}
-                    >
-                      <div>
-                        <div className="flex items-center justify-between gap-2 mb-1.5">
-                          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 min-w-0">
-                            <FileText className={`w-3.5 h-3.5 shrink-0 ${isCurrentlyActive ? 'text-blue-600' : 'text-slate-500'}`} />
-                            <span className="truncate" title={sample.fileName}>{sample.fileName}</span>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            {isCurrentlyActive && (
-                              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300">
-                                Ativo
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handlePromptDeleteSample(sample)}
-                              disabled={isExtracting}
-                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                              title="Excluir modelo"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                        <p className="text-[11px] text-slate-600 leading-snug mb-1.5">
-                          {sample.description}
-                        </p>
-                        {(sample.createdAt || resolveKnownReportCreatedAt(sample.fileName)) && (
-                          <div className="text-[10px] text-slate-500 mb-3 tabular-nums">
-                            {sample.fileSize} · Criado em: <strong className="text-slate-700">{sample.createdAt || resolveKnownReportCreatedAt(sample.fileName)}</strong>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleStageAndValidatePDF({ name: sample.fileName, createdAt: sample.createdAt })}
-                          disabled={isExtracting}
-                          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-                            isCurrentlyActive
-                              ? 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
-                              : 'bg-blue-600 text-white hover:bg-blue-500 shadow-xs'
-                          }`}
-                        >
-                          <Play className="w-3 h-3 shrink-0" />
-                          <span className="truncate">{isCurrentlyActive ? 'Revalidar Este Relatório' : 'Importar e Substituir Base'}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handlePromptDeleteSample(sample)}
-                          disabled={isExtracting}
-                          className="flex items-center justify-center gap-1 py-1.5 px-2.5 text-xs font-semibold text-rose-700 bg-white hover:bg-rose-50 border border-rose-200 hover:border-rose-300 rounded-md transition-colors shrink-0 cursor-pointer"
-                          title="Excluir este modelo"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                          <span>Excluir</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
         </div>
       )}
 
-      {/* CONFIRMATION MODAL TO REMOVE SOURCE OR TEMPLATE */}
+      {/* CONFIRMATION MODAL TO REMOVE SOURCE */}
       {itemToDelete && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl border border-slate-200 max-w-md w-full max-h-[92dvh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-xs">
@@ -1513,12 +1327,10 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
               </div>
               <div className="min-w-0 flex-1">
                 <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
-                  {itemToDelete.type === 'template' ? 'Excluir Modelo de Relatório' : 'Remover Fonte de Dados'}
+                  Remover Fonte de Dados
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  {itemToDelete.type === 'template'
-                    ? 'Tem certeza que deseja excluir este modelo da lista de relatórios?'
-                    : 'Tem certeza que deseja remover esta fonte de dados do Pulso Acadêmico?'}
+                  Tem certeza que deseja remover esta fonte de dados do Pulso Acadêmico?
                 </p>
               </div>
             </div>
@@ -1526,16 +1338,11 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
             <div className="p-4 sm:p-5 space-y-3 overflow-y-auto flex-1 min-h-0">
               <div className="p-3 bg-slate-50 rounded-md border border-slate-200 font-medium text-slate-800 break-words">
                 <span className="text-slate-500 text-[11px] block">
-                  {itemToDelete.type === 'template' ? 'Modelo a ser excluído:' : 'Fonte a ser removida:'}
+                  Fonte a ser removida:
                 </span>
                 <span className="font-semibold text-slate-900">{itemToDelete.displayName}</span>
                 <div className="text-[11px] text-slate-500 mt-1">
-                  Tipo:{' '}
-                  {itemToDelete.type === 'template'
-                    ? 'Modelo de Relatório Oficial'
-                    : itemToDelete.type === 'pdf'
-                    ? 'Relatório PDF Local'
-                    : 'Conector Power BI'}
+                  Tipo: {itemToDelete.type === 'pdf' ? 'Relatório PDF Local' : 'Conector Power BI'}
                 </div>
               </div>
 
@@ -1574,7 +1381,7 @@ export const IngestionView: React.FC<IngestionViewProps> = ({
                 onClick={handleConfirmDelete}
                 className="w-full sm:w-auto px-4 py-2 sm:py-1.5 font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-md shadow-xs transition-colors cursor-pointer"
               >
-                {itemToDelete.type === 'template' ? 'Confirmar Exclusão' : 'Confirmar Remoção'}
+                Confirmar Remoção
               </button>
             </div>
           </div>

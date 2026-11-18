@@ -25,7 +25,7 @@ import {
   getDetailedPedagogicalDiagnostic,
   getRecommendedPedagogicalAction,
 } from '../utils/calculations';
-import { resolveSourceCreatedAtFallback } from '../utils/pdfParser';
+import { resolveSourceCreatedAtFallback, resolveDisplayCourseName } from '../utils/pdfParser';
 
 export interface ExecutiveDashboardCanvasProps {
   disciplines: DisciplineMetric[];
@@ -76,9 +76,10 @@ export const ExecutiveDashboardCanvas: React.FC<ExecutiveDashboardCanvasProps> =
     ? (primaryDiscipline.campus.startsWith('Campus') || primaryDiscipline.campus.startsWith('Não informado') ? primaryDiscipline.campus : `Campus ${primaryDiscipline.campus}`)
     : 'Não informado na fonte';
 
+  const resolvedCourse = resolveDisplayCourseName(activeSession, disciplines);
   const courseLabel = !hasData
     ? 'CURSO: --'
-    : `CURSO: ${(activeSession?.course || executive?.course || primaryDiscipline?.course || 'Não informado na fonte').toUpperCase()}`;
+    : `CURSO: ${resolvedCourse.toUpperCase()}`;
 
   const fileCreatedAtDisplay = hasData
     ? resolveSourceCreatedAtFallback(activeSession, primaryDiscipline)

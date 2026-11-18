@@ -1,7 +1,7 @@
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { DisciplineMetric, ImportSession, SystemConfig } from '../types';
-import { resolveSourceCreatedAtFallback } from './pdfParser';
+import { resolveSourceCreatedAtFallback, resolveDisplayCourseName } from './pdfParser';
 
 /**
  * Fases do ciclo de vida da exportação em PDF para feedback reativo na UI.
@@ -340,7 +340,7 @@ async function renderFallbackExecutiveCanvas(
 
   const courseLabel = !hasData
     ? 'CURSO: --'
-    : `CURSO: ${(activeSession?.course || executive?.course || primary?.course || 'Não informado na fonte').toUpperCase()}`;
+    : `CURSO: ${resolveDisplayCourseName(activeSession, disciplines).toUpperCase()}`;
 
   const periodText = hasData
     ? executive?.entryYear

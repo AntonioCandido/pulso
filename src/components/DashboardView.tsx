@@ -18,7 +18,7 @@ import {
 import { DisciplineMetric, SystemConfig, AcademicCourse, ImportSession } from '../types';
 import { ExecutiveDashboardCanvas } from './ExecutiveDashboardCanvas';
 import { AcademicRiskNotifications } from './AcademicRiskNotifications';
-import { resolveSourceCreatedAtFallback } from '../utils/pdfParser';
+import { resolveSourceCreatedAtFallback, resolveDisplayCourseName } from '../utils/pdfParser';
 
 interface DashboardViewProps {
   disciplines: DisciplineMetric[];
@@ -66,7 +66,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const courseLabel = !hasData
     ? 'CURSO: --'
-    : `CURSO: ${(activeSession?.course || executive?.course || primaryDiscipline?.course || 'Não informado na fonte').toUpperCase()}`;
+    : `CURSO: ${resolveDisplayCourseName(activeSession, disciplines).toUpperCase()}`;
 
   const fileCreatedAtDisplay = hasData
     ? resolveSourceCreatedAtFallback(activeSession, primaryDiscipline)

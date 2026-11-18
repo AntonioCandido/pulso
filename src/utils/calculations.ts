@@ -1460,7 +1460,12 @@ export function mapDisciplinesToEstacioSlideTemplate(
   };
 
   // Identificação Institucional e Metadados
-  const courseName = (exec?.course || primary?.course || 'Ciência da Computação').toUpperCase();
+  const isInvalidCourse = (c?: string) =>
+    !c || /^(?:--|-|—|todos|todas|sele[cç][oõ]es m[uú]ltiplas|\(em branco\)|n[aã]o informado.*)$/i.test(c.trim());
+  const rawCourseName =
+    [activeSession?.course, exec?.course, ...safeItems.map((d) => d.course)].find((c) => !isInvalidCourse(c)) ||
+    'Não informado na fonte';
+  const courseName = rawCourseName.toUpperCase();
   const rawCampus = exec?.campus || primary?.campus || 'R9-Taquara';
   const unitName = (rawCampus.startsWith('Campus') || rawCampus.startsWith('R9') ? rawCampus : `Campus ${rawCampus}`).toUpperCase();
   const academicPeriod = config.academicPeriod || '2026.2';

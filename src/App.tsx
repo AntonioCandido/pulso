@@ -9,6 +9,7 @@ import { TestSuiteView } from './components/TestSuiteView';
 import { DisciplineMetric, SystemConfig, AcademicCourse, FormulaWeights, ImportSession } from './types';
 import { INITIAL_SYSTEM_CONFIG } from './data/mockAcademicData';
 import { exportAnalyticalWorkbook, exportPowerPointDeck } from './utils/calculations';
+import { resolveDisplayCourseName, isPlaceholderCourseValue } from './utils/pdfParser';
 
 const normalizeProfessorName = (name?: string) =>
   name ? name.replace(/Prof\.\s*Dr\.\s*Antônio\s*Cândido/gi, 'Prof. Antônio Cândido') : name;
@@ -115,19 +116,37 @@ export default function App() {
   // Replaces the entire imported dataset with zero leftovers from previous files.
   // =========================================================================
   const handleReplaceImportData = (newItems: DisciplineMetric[], sessionMeta: ImportSession) => {
-    // 1. Tag all new items with a fresh unique ID, the new importId, sourceFileOrUrl, and timestamp
+    const resolvedCourse = resolveDisplayCourseName(sessionMeta, newItems);
+    const normalizedCourse =
+      resolvedCourse === '--' ? 'Não informado na fonte' : resolvedCourse;
+
+    const normalizedSession: ImportSession = {
+      ...sessionMeta,
+      course: normalizedCourse,
+    };
+
+    // 1. Tag all new items with a fresh unique ID, the new importId, sourceFileOrUrl, and resolved course
     const taggedItems = newItems.map((item, idx) => ({
       ...item,
-      id: `${sessionMeta.importId}_${idx}_${item.code || 'disc'}`,
+      id: `${normalizedSession.importId}_${idx}_${item.code || 'disc'}`,
+      course: (isPlaceholderCourseValue(item.course) ? normalizedCourse : item.course) as DisciplineMetric['course'],
       professor: normalizeProfessorName(item.professor) || item.professor,
-      importId: sessionMeta.importId,
-      sourceFileOrUrl: sessionMeta.fileName,
-      lastUpdated: sessionMeta.importedAt,
+      importId: normalizedSession.importId,
+      sourceFileOrUrl: normalizedSession.fileName,
+      lastUpdated: normalizedSession.importedAt,
+      executiveSummary: item.executiveSummary
+        ? {
+            ...item.executiveSummary,
+            course: isPlaceholderCourseValue(item.executiveSummary.course)
+              ? normalizedCourse
+              : item.executiveSummary.course,
+          }
+        : item.executiveSummary,
     }));
 
     // 2. Atomically replace disciplines state (NEVER merge, concat or append)
     setDisciplines(taggedItems);
-    setActiveSession(sessionMeta);
+    setActiveSession(normalizedSession);
 
     // 3. Reset any temporary derived filters
     setAuditCourseFilter(null);
@@ -136,17 +155,17 @@ export default function App() {
     // 4. Update the single source of truth in local storage
     try {
       localStorage.setItem('pulso_disciplines_v6', JSON.stringify(taggedItems));
-      localStorage.setItem('pulso_active_session_v6', JSON.stringify(sessionMeta));
+      localStorage.setItem('pulso_active_session_v6', JSON.stringify(normalizedSession));
       const nextPdfDocs =
-        sessionMeta.sourceType === 'PDF'
+        normalizedSession.sourceType === 'PDF'
           ? [
               {
-                fileName: sessionMeta.fileName,
-                description: `Relatório Ativo · ${sessionMeta.campus} (${sessionMeta.studyTimeFormatted} estudo, ${sessionMeta.attendanceRate.toFixed(2).replace('.', ',')}% freq)`,
-                recordCount: sessionMeta.totalRecords,
-                fileSize: sessionMeta.fileSize || '—',
+                fileName: normalizedSession.fileName,
+                description: `Relatório Ativo · ${normalizedSession.campus} (${normalizedSession.studyTimeFormatted} estudo, ${normalizedSession.attendanceRate.toFixed(2).replace('.', ',')}% freq)`,
+                recordCount: normalizedSession.totalRecords,
+                fileSize: normalizedSession.fileSize || '—',
                 uploadedDate: new Date().toISOString().slice(0, 10),
-                createdAt: sessionMeta.fileCreatedAt,
+                createdAt: normalizedSession.fileCreatedAt,
               },
             ]
           : [];
@@ -250,6 +269,7 @@ export default function App() {
             onClearAllImportedData={handleClearAllImportedData}
             config={config}
             onUpdateConfig={setConfig}
+            onNavigateToDashboard={() => setActiveTab('dashboard')}
           />
         )}
 
