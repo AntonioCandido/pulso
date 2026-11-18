@@ -1874,6 +1874,12 @@ export async function exportPowerPointDeck(
   const totalStudents = safeItems.reduce((acc, d) => acc + (d.totalStudents || 0), 0);
   const avgLHI = hasData ? safeItems.reduce((acc, d) => acc + d.lhi, 0) / totalDisciplines : 0;
   const avgARS = hasData ? safeItems.reduce((acc, d) => acc + d.ars, 0) / totalDisciplines : 0;
+  const globalHealthyCount = safeItems.filter((d) => d.lhi >= 70 && d.ars < 25).length;
+  const globalCriticalLhiCount = safeItems.filter((d) => d.lhi < 70).length;
+  const globalAlertArsCount = safeItems.filter((d) => d.ars >= 25).length;
+  const globalBelow5hCount = safeItems.filter((d) => (d.studyHoursPerWeek || 0) < 5).length;
+  const highestArsItem = [...safeItems].sort((a, b) => (b.ars || 0) - (a.ars || 0))[0];
+  const bestLhiItem = [...safeItems].sort((a, b) => (b.lhi || 0) - (a.lhi || 0))[0];
 
   const parseHoursDecimal = (hhmm: string): number => {
     if (!hhmm) return 0;
@@ -1885,6 +1891,42 @@ export async function exportPowerPointDeck(
     }
     const n = parseFloat(hhmm);
     return Number.isNaN(n) ? 0 : Number(n.toFixed(2));
+  };
+
+  const formatScreenTip = (raw: string, maxLen = 250): string => {
+    const normalized = raw.replace(/\s+/g, ' ').trim();
+    if (normalized.length <= maxLen) return normalized;
+    const cut = normalized.slice(0, maxLen - 3);
+    const lastSpace = cut.lastIndexOf(' ');
+    return `${lastSpace > 40 ? cut.slice(0, lastSpace) : cut}...`;
+  };
+
+  const addHoverTip = (
+    targetSlide: pptxgen.Slide,
+    slideNum: number,
+    bounds: {
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      shape?: pptxgen.ShapeType;
+      rectRadius?: number;
+    },
+    objectName: string,
+    tooltipText: string
+  ) => {
+    const shapeType = bounds.shape ?? pptx.ShapeType.roundRect;
+    targetSlide.addShape(shapeType, {
+      x: bounds.x,
+      y: bounds.y,
+      w: bounds.w,
+      h: bounds.h,
+      fill: { type: 'solid', color: 'FFFFFF', transparency: 100 },
+      line: { type: 'none' },
+      ...(shapeType === pptx.ShapeType.roundRect ? { rectRadius: bounds.rectRadius ?? 0.05 } : {}),
+      objectName,
+      hyperlink: { slide: slideNum, tooltip: formatScreenTip(tooltipText) },
+    });
   };
 
   const applySlideChrome = (
@@ -1956,6 +1998,14 @@ export async function exportPowerPointDeck(
         color: TEXT_MUTED,
         valign: 'middle',
       }
+    );
+
+    addHoverTip(
+      targetSlide,
+      slideNum,
+      { x: 0.65, y: 6.98, w: 12.03, h: 0.36, shape: pptx.ShapeType.rect },
+      `Rodape Slide ${slideNum}`,
+      `Rastreabilidade: ${deck.slide1Cover.sourceFileName} · Criado em ${deck.slide1Cover.fileCreatedAt} · Exportado em ${deck.slide1Cover.presentationDateTime} · ${deck.slide1Cover.courseName} (${deck.slide1Cover.unitName}) · Coord.: ${deck.slide1Cover.coordinatorName}.`
     );
   };
 
@@ -2083,6 +2133,29 @@ export async function exportPowerPointDeck(
     { x: 9.28, y: 5.16, w: 2.80, h: 0.98, fontFace: 'Segoe UI' }
   );
 
+  // Dicas de tela interativas nos blocos principais da Capa (Slide 1)
+  addHoverTip(
+    slide1,
+    1,
+    { x: 0.70, y: 3.32, w: 8.20, h: 3.25, rectRadius: 0.08 },
+    'Capa Governanca da Base',
+    `Escopo auditado: ${totalDisciplines} turmas e ${totalStudents} discentes (${deck.slide1Cover.courseName}). Pesos Pulso 2.0: LHI (Aprend. 35%, Freq. 25%, Aprov. 20%, LMS 20%) e ARS (Reprov. 40%, Infreq. 30%, Déficit 20%, Evasão 10%).`
+  );
+  addHoverTip(
+    slide1,
+    1,
+    { x: 9.10, y: 3.60, w: 3.15, h: 1.25, rectRadius: 0.06 },
+    'Capa LHI Medio',
+    `LHI (Índice de Saúde de Aprendizagem): ${avgLHI.toFixed(1)}/100 pts · Status: ${getLHIStatus(avgLHI)} · Meta saudável ≥ 70 pts. ${globalHealthyCount} turma(s) saudável(is) e ${globalCriticalLhiCount} abaixo de 70 pts.`
+  );
+  addHoverTip(
+    slide1,
+    1,
+    { x: 9.10, y: 5.02, w: 3.15, h: 1.25, rectRadius: 0.06 },
+    'Capa ARS Medio',
+    `ARS (Score de Risco Acadêmico): ${avgARS.toFixed(1)}/100 pts · Nível: ${getARSLevel(avgARS)} · Faixa segura < 25 pts. ${globalAlertArsCount} turma(s) em Alerta/Crítico (ARS ≥ 25).`
+  );
+
   // =========================================================================
   // SLIDE 2: DASHBOARD EXECUTIVO (4 HERO CARDS + GRÁFICO COMPARATIVO REAL VS META VS A.A.)
   // =========================================================================
@@ -2201,6 +2274,32 @@ export async function exportPowerPointDeck(
   const curSM = parseFloat(smMetric.value.replace('%', '').replace(',', '.')) || 0;
   const tgtSM = parseFloat(smMetric.target.replace('%', '').replace(',', '.')) || 50;
 
+  const heroTooltips2 = [
+    `Tempo de Estudo (${studyActualFmt}): Meta ${studyTargetFmt} · A.A. ${studyPrevFmt}. Regra Pulso 2.0: navegação no conteúdo + 52 min por download no AVA. ${globalBelow5hCount} de ${totalDisciplines} turmas abaixo de 5h/sem.`,
+    `Frequência Discente (${s2.kpis.attendance.value}): ${s2.kpis.attendance.target} · A.A. ${aaAtt.toFixed(1)}%. Cálculo oficial: Presenças ÷ (Presenças + Faltas). Desvio: ${s2.kpis.attendance.deviation}.`,
+    `Grau de Aprendizagem (${s2.kpis.learning.value}): ${s2.kpis.learning.target} · A.A. ${aaLearn.toFixed(1)}%. Provas com nota ≥ esperada sobre total de provas realizadas. Desvio: ${s2.kpis.learning.deviation}.`,
+    `Reprovação Geral (${s2.kpis.failure.value}): ${s2.kpis.failure.target} · A.A. ${aaFail.toFixed(1)}%. Pulso 2.0: notas < 6 em maior(AV, NC, AVS) + (SM1 + SM2) entre os que realizaram ao menos 1 avaliação.`,
+  ];
+
+  heroItems2.forEach((card, idx) => {
+    const cx = 0.65 + idx * 3.06;
+    addHoverTip(
+      slide2,
+      2,
+      { x: cx, y: 1.24, w: 2.86, h: 1.56, rectRadius: 0.05 },
+      `Slide 2 Hero ${card.label}`,
+      heroTooltips2[idx]
+    );
+  });
+
+  addHoverTip(
+    slide2,
+    2,
+    { x: 0.65, y: 2.98, w: 8.15, h: 0.34, rectRadius: 0.05 },
+    'Slide 2 Cabecalho Grafico Comparativo',
+    `Comparativo A.A. → Real Atual: Aprend. ${aaLearn.toFixed(1)}%→${s2.kpis.learning.value} · Freq. ${aaAtt.toFixed(1)}%→${s2.kpis.attendance.value} · AV ${curAV.toFixed(1)}% · SM ${curSM.toFixed(1)}% · Reprov. ${aaFail.toFixed(1)}%→${s2.kpis.failure.value}.`
+  );
+
   slide2.addChart(
     pptx.ChartType.bar,
     [
@@ -2306,6 +2405,14 @@ export async function exportPowerPointDeck(
     }
   );
 
+  addHoverTip(
+    slide2,
+    2,
+    { x: 9.00, y: 2.98, w: 3.68, h: 3.82, rectRadius: 0.06 },
+    'Slide 2 Sintese Executiva',
+    `Base: ${totalDisciplines} turmas (${totalStudents} alunos). Maior risco: ${highestArsItem ? `${highestArsItem.code} (ARS ${highestArsItem.ars.toFixed(1)})` : '—'}. Melhor saúde: ${bestLhiItem ? `${bestLhiItem.code} (LHI ${bestLhiItem.lhi.toFixed(1)})` : '—'}. ${globalAlertArsCount} turma(s) com ARS ≥ 25.`
+  );
+
   // =========================================================================
   // SLIDE 3: OS 6 PILARES DO PULSO & EVOLUÇÃO DE TEMPO DE ESTUDO
   // =========================================================================
@@ -2393,6 +2500,23 @@ export async function exportPowerPointDeck(
       align: 'center',
       valign: 'middle',
     });
+
+    const pillarFormulaMap: Record<string, string> = {
+      'Tempo de Estudo': 'Navegação no conteúdo + 52 min por download realizado no LMS.',
+      'Grau Aprendizagem': 'Provas com nota ≥ nota esperada ÷ total de provas realizadas (peso 35% no LHI).',
+      'Reprovação Geral': 'Pulso 2.0: notas < 6 em maior(AV,NC,AVS)+(SM1+SM2) sobre avaliados (peso 40% no ARS).',
+      'Adesão Avaliação (AV)': 'Alunos com ≥1 avaliação (AV, NC, AVS, NF) ÷ total de alunos-disciplina.',
+      'Adesão Simulado (SM)': 'Alunos que realizaram SM1 e SM2 ÷ total de alunos-disciplina (até +2,0 pts extras).',
+      'Frequência Alunos': 'Presenças ÷ (Presenças + Faltas) (peso 25% no LHI / infreq. 30% no ARS).',
+    };
+    const formulaDesc = pillarFormulaMap[kpi.label] || 'Indicador oficial da Matriz Conceitual Pulso 2.0.';
+    addHoverTip(
+      slide3,
+      3,
+      { x: xPos, y: yPos, w: cardW3, h: 2.55, rectRadius: 0.06 },
+      `Slide 3 Pilar ${kpi.label}`,
+      `${kpi.label}: ${kpi.value} (Meta ${kpi.target}) · ${kpi.deviationText}. Regra: ${formulaDesc}`
+    );
   });
 
   // Gráfico Nativo de Evolução do Tempo de Estudo (Direita)
@@ -2419,6 +2543,16 @@ export async function exportPowerPointDeck(
   const studyPrevDec = exec ? parseHoursDecimal(exec.studyTimePreviousYear) : parseHoursDecimal(studyActualFmt);
   const studyActDec = parseHoursDecimal(studyActualFmt);
   const studyTgtDec = parseHoursDecimal(studyTargetFmt);
+  const studyGapHours = Math.max(0, studyTgtDec - studyActDec);
+  const studyPctHeader = studyTgtDec > 0 ? Math.min(100, (studyActDec / studyTgtDec) * 100) : 100;
+
+  addHoverTip(
+    slide3,
+    3,
+    { x: 8.15, y: 1.24, w: 4.53, h: 0.52, rectRadius: 0.06 },
+    'Slide 3 Cabecalho Tempo Estudo',
+    `Evolução semanal: A.A. ${studyPrevDec.toFixed(2)}h · Atual ${studyActDec.toFixed(2)}h · Meta ${studyTgtDec.toFixed(2)}h (${studyPctHeader.toFixed(1)}% atingido).`
+  );
 
   slide3.addChart(
     pptx.ChartType.bar,
@@ -2485,6 +2619,15 @@ export async function exportPowerPointDeck(
       lineSpacing: 14,
     }
   );
+  addHoverTip(
+    slide3,
+    3,
+    { x: 8.35, y: 5.12, w: 4.13, h: 1.42, rectRadius: 0.05 },
+    'Slide 3 Regra 52 Minutos',
+    studyGapHours > 0
+      ? `Déficit atual de ${studyGapHours.toFixed(2)}h/sem (${Math.round(studyGapHours * 60)} min). Equivalente a ~${Math.ceil((studyGapHours * 60) / 52)} download(s) orientado(s) por discente no AVA para atingir ${studyTargetFmt}.`
+      : `Meta de estudo superada (${studyActualFmt} vs ${studyTargetFmt}). Manter rotina de roteiros no AVA (+52 min por download) preserva o pilar LMS.`
+  );
 
   // =========================================================================
   // SLIDE 4: ENGAJAMENTO AVALIATIVO (BARRAS EMPILHADAS AV/SM + GAUGE DE META)
@@ -2531,6 +2674,14 @@ export async function exportPowerPointDeck(
     ...criticalForSm.map((d) => Number((d.adhesionSM ?? d.lmsAdherenceRate).toFixed(1))),
   ];
   const stackGap = stackDone.map((v) => Number(Math.max(0, 100 - v).toFixed(1)));
+
+  addHoverTip(
+    slide4,
+    4,
+    { x: 0.65, y: 1.24, w: 7.25, h: 0.50, rectRadius: 0.06 },
+    'Slide 4 Cabecalho Composicao AV SM',
+    `Adesão AV global: ${curAV.toFixed(1)}% (meta ${tgtAV.toFixed(0)}%) · Adesão SM global: ${curSM.toFixed(1)}% (meta ${tgtSM.toFixed(0)}%). Turmas prioritárias em SM: ${criticalForSm.map((d) => `${d.code} (${(d.adhesionSM ?? d.lmsAdherenceRate).toFixed(1)}%)`).join(', ') || '—'}.`
+  );
 
   slide4.addChart(
     pptx.ChartType.bar,
@@ -2583,6 +2734,13 @@ export async function exportPowerPointDeck(
     color: NAVY,
     align: 'center',
   });
+  addHoverTip(
+    slide4,
+    4,
+    { x: 8.10, y: 1.24, w: 4.58, h: 0.46, rectRadius: 0.06 },
+    'Slide 4 Gauge Meta Estudo',
+    `Cumprimento de ${studyPctAchieved.toFixed(1)}% da meta semanal (${studyActualFmt} realizados frente a ${studyTargetFmt}). Déficit remanescente: ${studyPctRemaining.toFixed(1)}%.`
+  );
 
   slide4.addChart(
     pptx.ChartType.doughnut,
@@ -2653,6 +2811,13 @@ export async function exportPowerPointDeck(
       lineSpacing: 15,
     }
   );
+  addHoverTip(
+    slide4,
+    4,
+    { x: 8.10, y: 4.46, w: 4.58, h: 2.28, rectRadius: 0.06 },
+    'Slide 4 Alavanca Somativa',
+    `Com ${(100 - curSM).toFixed(1)}% sem entrega de SM1/SM2, alunos com nota entre 4,0 e 5,9 na AV/NC ficam retidos. Mutirão assistido resgata até +2,0 pts e reduz reprovação sem custo adicional.`
+  );
 
   // =========================================================================
   // SLIDE 5: RANKING DE TEMPO DE ESTUDO E NÍVEL DE RISCO POR DISCIPLINA
@@ -2701,6 +2866,13 @@ export async function exportPowerPointDeck(
     color: 'FFFFFF',
     valign: 'middle',
   });
+  addHoverTip(
+    slide5,
+    5,
+    { x: 0.65, y: 1.24, w: 7.55, h: 0.42, shape: pptx.ShapeType.rect },
+    'Slide 5 Cabecalho Ranking Estudo',
+    `Exibindo até 12 turmas ordenadas por dedicação semanal. Amplitude: ${topLeader ? `${topLeader.code} (${topLeader.studyTimeFormatted})` : '—'} até ${lowestStudy ? `${lowestStudy.code} (${lowestStudy.studyTimeFormatted})` : '—'}. ${below5hCount} turma(s) < 5h/sem.`
+  );
 
   slide5.addChart(
     pptx.ChartType.bar,
@@ -2787,6 +2959,45 @@ export async function exportPowerPointDeck(
       fontFace: 'Segoe UI',
       lineSpacing: 14,
     }
+  );
+
+  // Dicas complementares por bloco de destaque no painel lateral (Slide 5)
+  addHoverTip(
+    slide5,
+    5,
+    { x: 8.50, y: 1.82, w: 4.08, h: 1.15, rectRadius: 0.04 },
+    'Slide 5 Destaque Lider Dedicacao',
+    topLeader
+      ? `Líder: ${topLeader.name} (${topLeader.code}) · Docente: ${topLeader.professor} · ${topLeader.totalStudents} alunos · LHI ${topLeader.lhi.toFixed(1)} | ARS ${topLeader.ars.toFixed(1)} · Aprend. ${topLeader.learningScore.toFixed(1)}% · Freq. ${topLeader.attendanceRate.toFixed(1)}%.`
+      : 'Sem dados de liderança de dedicação na base atual.'
+  );
+  addHoverTip(
+    slide5,
+    5,
+    { x: 8.50, y: 2.98, w: 4.08, h: 1.15, rectRadius: 0.04 },
+    'Slide 5 Destaque Piso Dedicacao',
+    lowestStudy
+      ? `Menor dedicação: ${lowestStudy.name} (${lowestStudy.code}) · Docente: ${lowestStudy.professor} · ${lowestStudy.totalStudents} alunos · LHI ${lowestStudy.lhi.toFixed(1)} | ARS ${lowestStudy.ars.toFixed(1)} · ${getRecommendedPedagogicalAction(lowestStudy)}`
+      : 'Sem dados de piso de dedicação na base atual.'
+  );
+  addHoverTip(
+    slide5,
+    5,
+    { x: 8.50, y: 4.14, w: 4.08, h: 1.15, rectRadius: 0.04 },
+    'Slide 5 Destaque Concentracao Matriculas',
+    largestClasses.length > 0
+      ? `Maiores turmas: ${largestClasses.map((c) => `${c.code} (${c.totalStudents} al., LHI ${c.lhi.toFixed(1)}, Reprov. ${c.failureRate.toFixed(1)}%)`).join(' · ')}. Somam ${largestClasses.reduce((s, c) => s + c.totalStudents, 0)} de ${totalStudents} matrículas.`
+      : 'Sem dados de concentração de matrículas.'
+  );
+  const arsAlertList = [...safeItems].filter((d) => d.ars >= 25).sort((a, b) => b.ars - a.ars).slice(0, 3);
+  addHoverTip(
+    slide5,
+    5,
+    { x: 8.50, y: 5.30, w: 4.08, h: 1.28, rectRadius: 0.04 },
+    'Slide 5 Destaque Monitoramento ARS',
+    arsAlertList.length > 0
+      ? `Turmas ARS ≥ 25: ${arsAlertList.map((d) => `${d.code} (ARS ${d.ars.toFixed(1)}, LHI ${d.lhi.toFixed(1)})`).join(' · ')}. Requerem acompanhamento prioritário da coordenação.`
+      : `Nenhuma turma com ARS ≥ 25 na base atual. Manter monitoramento preventivo de frequência e simulados SM.`
   );
 
   // =========================================================================
@@ -2910,7 +3121,8 @@ export async function exportPowerPointDeck(
     color: EMERALD,
   });
 
-  // Plota pontos das turmas com rótulo de código
+  // Plota pontos das turmas com rótulo de código e armazena áreas de hover por disciplina
+  const matrixDotHitTargets: { px: number; py: number; d: DisciplineMetric }[] = [];
   safeItems.forEach((d, i) => {
     const clampedLhi = Math.max(minLhi + 1, Math.min(maxLhi - 1, d.lhi));
     const clampedArs = Math.max(1, Math.min(maxArs - 2, d.ars));
@@ -2940,6 +3152,27 @@ export async function exportPowerPointDeck(
         color: dotColor === ROSE ? ROSE : TEXT_MAIN,
       });
     }
+
+    matrixDotHitTargets.push({ px, py, d });
+  });
+
+  addHoverTip(
+    slide6,
+    6,
+    { x: 0.65, y: 1.24, w: 6.15, h: 0.48, rectRadius: 0.06 },
+    'Slide 6 Cabecalho Matriz LHI ARS',
+    `Cortes Pulso 2.0: LHI ≥ 70 pts e ARS < 25 pts. ${globalHealthyCount} turma(s) na Zona Saudável · ${globalCriticalLhiCount} com LHI < 70 · ${globalAlertArsCount} com ARS ≥ 25. Passe o mouse nos pontos para ver os dados de cada turma.`
+  );
+
+  // Alvos transparentes sobre cada ponto da matriz para exibir métricas completas no hover
+  matrixDotHitTargets.forEach(({ px, py, d }) => {
+    addHoverTip(
+      slide6,
+      6,
+      { x: px - 0.12, y: py - 0.12, w: 0.24, h: 0.24, shape: pptx.ShapeType.ellipse },
+      `Slide 6 Ponto ${d.code}`,
+      `${d.code} · ${d.name} (${d.professor}, ${d.totalStudents} al.) — LHI ${d.lhi.toFixed(1)} | ARS ${d.ars.toFixed(1)} | Aprend. ${d.learningScore.toFixed(1)}% | Freq. ${d.attendanceRate.toFixed(1)}% | Reprov. ${d.failureRate.toFixed(1)}%`
+    );
   });
 
   slide6.addText('Eixo X: LHI Saúde Acadêmica (55 → 95 pts) · Corte 70 pts   |   Eixo Y: ARS Risco (0 → ' + maxArs + ' pts)', {
@@ -3037,6 +3270,14 @@ export async function exportPowerPointDeck(
         color: TEXT_MAIN,
         lineSpacing: 12,
       }
+    );
+
+    addHoverTip(
+      slide6,
+      6,
+      { x: 7.00, y: cy, w: 5.68, h: 1.60, rectRadius: 0.06 },
+      `Slide 6 Top Critica ${idx + 1} ${item.code}`,
+      `${item.code} · ${item.totalStudents} al. · Estudo ${item.studyTimeFormatted || item.studyHoursPerWeek.toFixed(1) + 'h'} · Aprend. ${item.learningScore.toFixed(1)}% · Freq. ${item.attendanceRate.toFixed(1)}% · AV ${(item.adhesionAV ?? 0).toFixed(1)}% | SM ${(item.adhesionSM ?? 0).toFixed(1)}% · Ação: ${getRecommendedPedagogicalAction(item)}`
     );
   });
 
@@ -3150,6 +3391,20 @@ export async function exportPowerPointDeck(
         lineSpacing: 14,
       }
     );
+
+    const axisRoleTip =
+      idx === 0
+        ? `Atuação em sala/AVA para ${focusDiscipline ? `${focusDiscipline.code} (${focusDiscipline.professor})` : 'turma foco'}. Foco: ${ax.subtitle}. Gargalo: ${focusDiag?.disciplineAnalysis.primaryBottleneck.indicator || 'Aprendizagem'}.`
+        : idx === 1
+          ? `Governança da coordenação sobre ${focusDiscipline ? `${focusDiscipline.code} (${focusDiscipline.totalStudents} al., ARS ${focusDiscipline.ars.toFixed(1)})` : 'base crítica'}. Foco: ${ax.subtitle}.`
+          : `Mobilização discente e monitoria em ${focusDiscipline ? `${focusDiscipline.code} (SM ${(focusDiscipline.adhesionSM ?? 0).toFixed(1)}%, Estudo ${focusDiscipline.studyTimeFormatted})` : 'simulados SM1/SM2'}. Meta: elevar LHI > 70 pts.`;
+    addHoverTip(
+      slide7,
+      7,
+      { x: cx, y: 1.24, w: 3.83, h: 5.50, rectRadius: 0.06 },
+      `Slide 7 ${ax.title}`,
+      `${ax.title} — ${axisRoleTip}`
+    );
   });
 
   // =========================================================================
@@ -3197,6 +3452,16 @@ export async function exportPowerPointDeck(
         )
       : [0];
 
+  addHoverTip(
+    slide8,
+    8,
+    { x: 0.65, y: 1.24, w: 6.25, h: 0.50, rectRadius: 0.06 },
+    'Slide 8 Cabecalho Simulacao LHI',
+    top4ForProj.length > 0
+      ? `Ganho projetado (30d) nas ${top4ForProj.length} turmas prioritárias: ${top4ForProj.map((d, i) => `${d.code} (${d.lhi.toFixed(1)}→${projTarget[i].toFixed(1)})`).join(' · ')}.`
+      : 'Simulação comparativa entre LHI atual e LHI projetado em 30 dias.'
+  );
+
   slide8.addChart(
     pptx.ChartType.bar,
     [
@@ -3223,9 +3488,21 @@ export async function exportPowerPointDeck(
     }
   );
 
+  const deadlineMeaningMap: Record<string, string> = {
+    'D+2': 'Marco D+2 (até 2 dias)',
+    'D+5': 'Marco D+5 (até 5 dias)',
+    'D+10': 'Marco D+10 (até 10 dias)',
+    'D+15': 'Marco D+15 (até 15 dias)',
+  };
+
   // Cronograma de Marcos (Direita)
   deck.slide7ActionPlan.steps.forEach((step, idx) => {
     const sy = 1.24 + idx * 1.41;
+    const badgeMeaning = deadlineMeaningMap[step.deadline] || `Marco ${step.deadline} (cronograma 30d)`;
+    const badgeTooltip = formatScreenTip(
+      `${badgeMeaning} · Etapa ${step.stepNumber}: ${step.title} (${step.owner}) — ${step.description}`
+    );
+
     slide8.addShape(pptx.ShapeType.roundRect, {
       x: 7.12,
       y: sy,
@@ -3243,6 +3520,8 @@ export async function exportPowerPointDeck(
       fill: { color: idx === 0 ? NAVY : idx === 3 ? EMERALD : GOLD },
       line: { color: idx === 0 ? NAVY : idx === 3 ? EMERALD : GOLD, width: 0 },
       rectRadius: 0.05,
+      objectName: `Badge ${step.deadline} - ${step.title}`,
+      hyperlink: { slide: 8, tooltip: badgeTooltip },
     });
     slide8.addText(step.deadline, {
       x: 7.28,
@@ -3275,6 +3554,26 @@ export async function exportPowerPointDeck(
       fontFace: 'Segoe UI',
       color: TEXT_MUTED,
       lineSpacing: 12,
+    });
+    // Dica de tela complementar no card da etapa (adicionada antes da sobreposição do selo para preservar prioridade do selo)
+    addHoverTip(
+      slide8,
+      8,
+      { x: 7.12, y: sy, w: 5.56, h: 1.26, rectRadius: 0.05 },
+      `Card Etapa ${step.stepNumber} - ${step.title}`,
+      `Etapa ${step.stepNumber} · ${badgeMeaning} · Resp.: ${step.owner} · Foco: ${top4ForProj.map((d) => d.code).join(', ') || 'base geral'}. ${step.description}`
+    );
+    // Sobreposição transparente sobre o selo para exibir a dica de tela (tooltip) ao posicionar o ponteiro do mouse sem sublinhar o texto
+    slide8.addShape(pptx.ShapeType.roundRect, {
+      x: 7.28,
+      y: sy + 0.16,
+      w: 0.92,
+      h: 0.42,
+      fill: { type: 'solid', color: 'FFFFFF', transparency: 100 },
+      line: { type: 'none' },
+      rectRadius: 0.05,
+      objectName: `Tooltip ${step.deadline} - ${step.title}`,
+      hyperlink: { slide: 8, tooltip: badgeTooltip },
     });
   });
 
@@ -3321,16 +3620,51 @@ export async function exportPowerPointDeck(
     ]);
   });
 
+  const colW9 = [3.38, 2.35, 0.75, 0.90, 1.00, 0.95, 1.05, 1.65];
   slide9.addTable(tableRows, {
     x: 0.65,
     y: 1.24,
     w: 12.03,
-    colW: [3.38, 2.35, 0.75, 0.90, 1.00, 0.95, 1.05, 1.65],
+    colW: colW9,
     fontSize: 8.8,
     fontFace: 'Segoe UI',
     color: TEXT_MAIN,
     border: { color: BORDER, pt: 1 },
     rowH: 0.46,
+  });
+
+  // Dicas de tela nas colunas do cabeçalho do Quadro Consolidado (Slide 9)
+  const headerTips9 = [
+    'Disciplina & Código: identificação oficial da turma importada do relatório.',
+    'Docente Titular responsável pela condução pedagógica da disciplina.',
+    `Total de alunos matriculados na turma (Base total: ${totalStudents} discentes).`,
+    'Tempo de Estudo semanal no AVA: navegação + 52 min por download.',
+    'Grau de Aprendizagem: provas ≥ nota esperada ÷ total de provas realizadas.',
+    'Frequência: Presenças ÷ (Presenças + Faltas). Corte crítico < 75%.',
+    'Reprovação Pulso 2.0: notas < 6 em maior(AV,NC,AVS)+(SM1+SM2) entre avaliados.',
+    'LHI (Saúde ≥ 70 ideal) / ARS (Risco < 25 seguro). Passe nas linhas para ver a ação.',
+  ];
+  let hx9 = 0.65;
+  colW9.forEach((cw, colIdx) => {
+    addHoverTip(
+      slide9,
+      9,
+      { x: hx9, y: 1.24, w: cw, h: 0.46, shape: pptx.ShapeType.rect },
+      `Slide 9 Cabecalho Col ${colIdx + 1}`,
+      headerTips9[colIdx]
+    );
+    hx9 += cw;
+  });
+
+  // Dicas de tela por linha da tabela com dados completos + adesões AV/SM + ação recomendada
+  appendixSlice.forEach((d, idx) => {
+    addHoverTip(
+      slide9,
+      9,
+      { x: 0.65, y: 1.70 + idx * 0.46, w: 12.03, h: 0.46, shape: pptx.ShapeType.rect },
+      `Slide 9 Linha ${d.code}`,
+      `${d.name} (${d.code} · Turma ${d.classCode}) · Prof. ${d.professor} · LHI ${d.lhi.toFixed(1)} (${getLHIStatus(d.lhi)}) | ARS ${d.ars.toFixed(1)} (${getARSLevel(d.ars)}) · AV ${(d.adhesionAV ?? 0).toFixed(1)}% | SM ${(d.adhesionSM ?? 0).toFixed(1)}% · Ação: ${getRecommendedPedagogicalAction(d)}`
+    );
   });
 
   if (safeItems.length > appendixSlice.length) {
@@ -3358,6 +3692,14 @@ export async function exportPowerPointDeck(
     fontFace: 'Segoe UI',
     color: TEXT_MUTED,
   });
+
+  addHoverTip(
+    slide9,
+    9,
+    { x: 0.65, y: 6.56, w: 12.03, h: 0.34, shape: pptx.ShapeType.rect },
+    'Slide 9 Nota Governanca',
+    `Critério de destaque: linhas em âmbar indicam LHI < 70 ou ARS ≥ 25. Base completa contempla ${totalDisciplines} turmas e ${totalStudents} discentes ordenados por maior ARS.`
+  );
 
   const filename = `PulsoAcademico_Apresentacao_Executiva_${new Date().toISOString().slice(0, 10)}.pptx`;
   await pptx.writeFile({ fileName: filename });
